@@ -16,8 +16,9 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # حافظه‌ی موقت برای ویدیو
 pending_videos = {}
+MAX_CAPTION = 1024
 
-# هندلر اصلی: ویدیو + کپشن
+# هندلر اصلی
 async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global pending_videos
     chat_id = update.effective_chat.id
@@ -32,13 +33,29 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         video_msg = pending_videos.pop(chat_id)
         caption = update.message.text
 
-        # ارسال ویدیو با کپشن
-        await context.bot.copy_message(
-            chat_id=chat_id,
-            from_chat_id=video_msg.chat_id,
-            message_id=video_msg.message_id,
-            caption=caption
-        )
+        # اگر کپشن طولانی‌تر از حد مجاز بود
+        if len(caption) > MAX_CAPTION:
+            short_caption = caption[:MAX_CAPTION]
+            rest = caption[MAX_CAPTION:]
+
+            # ارسال ویدیو با کپشن کوتاه
+            await context.bot.copy_message(
+                chat_id=chat_id,
+                from_chat_id=video_msg.chat_id,
+                message_id=video_msg.message_id,
+                caption=short_caption
+            )
+
+            # بقیه متن رو جدا بفرست
+            await context.bot.send_message(chat_id=chat_id, text=rest)
+        else:
+            # کپشن کوتاه → مستقیم روی ویدیو
+            await context.bot.copy_message(
+                chat_id=chat_id,
+                from_chat_id=video_msg.chat_id,
+                message_id=video_msg.message_id,
+                caption=caption
+            )
 
         # پاک کردن پیام‌های خام (ویدیو + کپشن)
         try:
@@ -47,14 +64,8 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-# هندلر تستی: هر پیامی بیاد → جواب بده
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message:
-        await update.message.reply_text("✅ پیام رسید (Webhook کار می‌کنه)")
-
-# اضافه کردن هندلرها
+# اضافه کردن هندلر
 app.add_handler(MessageHandler(filters.ALL, handler))
-app.add_handler(MessageHandler(filters.ALL, echo))
 
 print("🤖 بات روی Railway روشن شد...")
 
