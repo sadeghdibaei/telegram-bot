@@ -1,59 +1,56 @@
 import os
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
+pending_videos = {}
+
+async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global pending_videos
+    chat_id = update.effective_chat.id
+
+    # اگر پیام ویدیو بود → ذخیره کن
+    if update.message and update.message.video:
+        pending_videos[chat_id] = update.message
+        return
+
+    # اگر پیام متن بود و قبلاً ویدیو ذخیره شده
+    if update.message and update.message.text and chat_id in pending_videos:
+        video_msg = pending_videos.pop(chat_id)
+        caption = update.message.text
+
+        # ارسال ویدیو با کپشن
+        await context.bot.copy_message(
+            chat_id=chat_id,
+            from_chat_id=video_msg.chat_id,
+            message_id=video_msg.message_id,
+            caption=caption
+        )
+
+        # پاک کردن پیام‌های خام (ویدیو + کپشن)
+        try:
+            await video_msg.delete()
+            await update.message.delete()
+        except:
+            pass
+
+# ساخت اپلیکیشن
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
+app.add_handler(MessageHandler(filters.ALL, handler))
 
-# وقتی ویدیو میاد → ذخیره کن برای استفاده بعدی
-async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message and update.message.video:
-        context.user_data["pending_video"] = {
-            "file_id": update.message.video.file_id,
-            "msg_id": update.message.message_id,
-            "chat_id": update.message.chat_id,
-        }
+print("🤖 بات روی Railway روشن شد...")
 
-# وقتی متن (کپشن اصلی) میاد → ویدیو قبلی رو با این کپشن دوباره بفرست
-async def handle_caption(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-
-    pending = context.user_data.get("pending_video")
-    if not pending:
-        return  # اگه ویدیو ذخیره نشده بود، کاری نکن
-
-    chat_id = pending["chat_id"]
-    video_id = pending["file_id"]
-    video_msg_id = pending["msg_id"]
-    caption_msg_id = update.message.message_id
-
-    # پاک کردن پیام‌های خام
-    try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=video_msg_id)
-    except Exception:
-        pass
-    try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=caption_msg_id)
-    except Exception:
-        pass
-
-    # ارسال ویدیو با کپشن اصلی
-    await context.bot.send_video(chat_id=chat_id, video=video_id, caption=update.message.text)
-
-    # پاک کردن بافر
-    context.user_data.pop("pending_video", None)
-
-# هندلرها
-app.add_handler(MessageHandler(filters.VIDEO, handle_video))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_caption))
-
-if __name__ == "__main__":
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
-        url_path=BOT_TOKEN,
-        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
-    )
+# اینجا به جای polling از webhook استفاده می‌کنیم
+app.run_webhook(
+    listen="0.0.0.0",
+    port=int(os.environ.get("PORT", 5000)),
+    url_path=BOT_TOKEN,
+    webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}"
+)
