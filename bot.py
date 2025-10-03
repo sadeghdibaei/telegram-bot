@@ -7,8 +7,17 @@ from telegram.ext import (
     filters,
 )
 
+# متغیرهای محیطی
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+WEBHOOK_URL = os.environ["WEBHOOK_URL"]
+
+# ساخت اپلیکیشن
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# حافظه‌ی موقت برای ویدیو
 pending_videos = {}
 
+# هندلر اصلی: ویدیو + کپشن
 async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global pending_videos
     chat_id = update.effective_chat.id
@@ -38,16 +47,18 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-# ساخت اپلیکیشن
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-WEBHOOK_URL = os.environ["WEBHOOK_URL"]
+# هندلر تستی: هر پیامی بیاد → جواب بده
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message:
+        await update.message.reply_text("✅ پیام رسید (Webhook کار می‌کنه)")
 
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+# اضافه کردن هندلرها
 app.add_handler(MessageHandler(filters.ALL, handler))
+app.add_handler(MessageHandler(filters.ALL, echo))
 
 print("🤖 بات روی Railway روشن شد...")
 
-# اینجا به جای polling از webhook استفاده می‌کنیم
+# اجرای وبهوک
 app.run_webhook(
     listen="0.0.0.0",
     port=int(os.environ.get("PORT", 5000)),
