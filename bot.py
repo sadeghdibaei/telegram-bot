@@ -1,66 +1,48 @@
 import os
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from flask import Flask, request
+from telegram import Update, Bot
+from telegram.ext import Dispatcher, MessageHandler, filters, CallbackContext
 
-# دیکشنری برای نگه داشتن ویدیوهای در انتظار کپشن
-pending_videos = {}
+# گرفتن مقادیر از Environment Variables
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
-async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global pending_videos
-    chat_id = update.effective_chat.id
+app = Flask(__name__)
+bot = Bot(token=BOT_TOKEN)
 
-    # اگر پیام ویدیو بود → ذخیره کن
-    if update.message and update.message.video:
-        pending_videos[chat_id] = update.message
-        return
+# Dispatcher برای مدیریت پیام‌ها
+dispatcher = Dispatcher(bot, None, workers=0)
 
-    # اگر پیام متن بود و قبلاً ویدیو ذخیره شده
-    if update.message and update.message.text and chat_id in pending_videos:
-        video_msg = pending_videos.pop(chat_id)
-        caption = update.message.text
+# هندلر برای پیام‌های ویدیو + کپشن
+def handle_message(update: Update, context: CallbackContext):
+    if update.message and update.message.video and update.message.caption:
+        # فقط ویدیو + کپشن رو نگه می‌داریم
+        chat_id = update.message.chat_id
+        video = update.message.video.file_id
+        caption = update.message.caption
 
-        # ارسال ویدیو با کپشن
-        await context.bot.copy_message(
-            chat_id=chat_id,
-            from_chat_id=video_msg.chat_id,
-            message_id=video_msg.message_id,
-            caption=caption
-        )
+        # پاک کردن پیام اصلی
+        context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
 
-        # پاک کردن پیام‌های خام (ویدیو + کپشن)
-        try:
-            await video_msg.delete()
-            await update.message.delete()
-        except:
-            pass
+        # ارسال خروجی نهایی
+        context.bot.send_video(chat_id=chat_id, video=video, caption=caption)
 
-async def main():
-    token = os.environ["8046432071:AAGHppjd4-bCVnASER4Nx2AcTjXXKsFVim4"]
-    webhook_url = os.environ["https://example.com/temp"]
+dispatcher.add_handler(MessageHandler(filters.VIDEO & filters.Caption(True), handle_message))
 
-    app = (
-        ApplicationBuilder()
-        .token(token)
-        .build()
-    )
+# وبهوک برای دریافت آپدیت‌ها
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return "ok"
 
-    # هندلر اصلی
-    app.add_handler(MessageHandler(filters.ALL, handler))
-
-    # راه‌اندازی webhook
-    await app.bot.set_webhook(webhook_url)
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 8080)),
-        url_path=token,
-        webhook_url=webhook_url
-    )
+# روت تست ساده
+@app.route("/")
+def index():
+    return "Bot is running!"
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    # ست کردن وبهوک
+    bot.delete_webhook()
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
