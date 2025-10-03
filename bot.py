@@ -1,12 +1,9 @@
 import os
-from flask import Flask, request
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
-
-app = Flask(__name__)
 
 # ساخت اپلیکیشن تلگرام
 telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -24,19 +21,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ارسال خروجی نهایی
         await context.bot.send_video(chat_id=chat_id, video=video, caption=caption)
 
-telegram_app.add_handler(MessageHandler(filters.VIDEO & filters.Caption(True), handle_message))
-
-# وبهوک برای دریافت آپدیت‌ها
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-async def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    await telegram_app.process_update(update)
-    return "ok"
-
-# روت تست ساده
-@app.route("/")
-def index():
-    return "Bot is running!"
+# اضافه کردن هندلر
+telegram_app.add_handler(MessageHandler(filters.VIDEO, handle_message))
 
 if __name__ == "__main__":
     telegram_app.run_webhook(
