@@ -56,7 +56,7 @@ async def handle_video_and_caption(update: Update, context: ContextTypes.DEFAULT
             reply_markup = None
             if button_url:
                 reply_markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("مشاهده در اینستاگرام", url=button_url)]
+                    [InlineKeyboardButton("Open", url=button_url)]
                 ])
 
             # ارسال ویدیو + کپشن + دکمه (اگر بود)
