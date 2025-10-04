@@ -37,15 +37,19 @@ async def handle_video_and_caption(update: Update, context: ContextTypes.DEFAULT
         caption = msg.text
 
         try:
+            # اگر کپشن طولانی‌تر از حد مجاز بود → برش + سه نقطه
             if len(caption) > MAX_CAPTION:
-                short_caption = caption[:MAX_CAPTION]
-                rest = caption[MAX_CAPTION:]
+                caption = caption[:MAX_CAPTION - 3] + "..."
 
-                await context.bot.send_video(chat_id, video=video_msg.video.file_id, caption=short_caption)
-                await context.bot.send_message(chat_id, text=rest)
-            else:
-                await context.bot.send_video(chat_id, video=video_msg.video.file_id, caption=caption)
+            # ارسال فقط یک پیام (ویدیو + کپشن)
+            await context.bot.send_video(
+                chat_id,
+                video=video_msg.video.file_id,
+                caption=caption
+            )
+
         finally:
+            # پاک کردن پیام‌های اولیه
             for m in [video_msg, msg]:
                 try:
                     await m.delete()
