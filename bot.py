@@ -22,7 +22,7 @@ PORT = int(os.environ.get("PORT", 5000))
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # Config
-EXTRA_LINK_BLOCK = 60   # فضای رزرو برای "[ OPEN POST ⎋ ] + لینک"
+EXTRA_LINK_BLOCK = 60   # فضای رزرو برای لینک
 MAX_CAPTION = 1024 - EXTRA_LINK_BLOCK
 SINGLE_DEBOUNCE_SECS = 3
 GROUP_DEBOUNCE_SECS = 2
@@ -40,7 +40,7 @@ def shorten_caption(text: Optional[str], limit: int) -> str:
 def build_caption(base_caption: str, url: Optional[str]) -> str:
     caption = shorten_caption(base_caption, MAX_CAPTION)
     if url:
-        caption += f"\n\n[ OPEN POST ⎋ ]\n{url}"
+        caption += f"\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
     return caption
 
 def extract_button_url(msg) -> Optional[str]:
@@ -60,9 +60,9 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
     try:
         if data["type"] == "photo":
-            await context.bot.send_photo(chat_id, photo=data["file_id"], caption=caption)
+            await context.bot.send_photo(chat_id, photo=data["file_id"], caption=caption, parse_mode="HTML")
         else:
-            await context.bot.send_video(chat_id, video=data["file_id"], caption=caption)
+            await context.bot.send_video(chat_id, video=data["file_id"], caption=caption, parse_mode="HTML")
     finally:
         for m in data.get("raw_msgs", []):
             try:
@@ -78,6 +78,7 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
     if data["media"]:
         data["media"][0].caption = caption
+        data["media"][0].parse_mode = "HTML"
 
     try:
         await context.bot.send_media_group(chat_id, media=data["media"])
