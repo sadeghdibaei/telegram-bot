@@ -1,5 +1,5 @@
 import os
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -37,15 +37,38 @@ async def handle_video_and_caption(update: Update, context: ContextTypes.DEFAULT
         caption = msg.text
 
         try:
+            # کوتاه‌سازی کپشن در صورت نیاز
             if len(caption) > MAX_CAPTION:
-                short_caption = caption[:MAX_CAPTION]
-                rest = caption[MAX_CAPTION:]
+                caption = caption[:MAX_CAPTION - 3] + "..."
 
-                await context.bot.send_video(chat_id, video=video_msg.video.file_id, caption=short_caption)
-                await context.bot.send_message(chat_id, text=rest)
-            else:
-                await context.bot.send_video(chat_id, video=video_msg.video.file_id, caption=caption)
+            # اگر پیام ورودی دکمه داشت → لینک رو بگیر
+            button_url = None
+            if msg.reply_markup and msg.reply_markup.inline_keyboard:
+                for row in msg.reply_markup.inline_keyboard:
+                    for button in row:
+                        if button.url:
+                            button_url = button.url
+                            break
+                    if button_url:
+                        break
+
+            # ساخت دکمه جدید با همون لینک
+            reply_markup = None
+            if button_url:
+                reply_markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Open", url=button_url)]
+                ])
+
+            # ارسال ویدیو + کپشن + دکمه (اگر بود)
+            await context.bot.send_video(
+                chat_id,
+                video=video_msg.video.file_id,
+                caption=caption,
+                reply_markup=reply_markup
+            )
+
         finally:
+            # پاک کردن پیام‌های اولیه
             for m in [video_msg, msg]:
                 try:
                     await m.delete()
