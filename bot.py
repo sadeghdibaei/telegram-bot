@@ -40,7 +40,6 @@ def build_caption(base_caption: str, url: Optional[str]) -> str:
     return caption
 
 def extract_button_url(msg) -> Optional[str]:
-    # اگر لینک به‌صورت دکمه در ورودی بود، استخراجش کنیم
     if not msg or not msg.reply_markup or not msg.reply_markup.inline_keyboard:
         return None
     for row in msg.reply_markup.inline_keyboard:
@@ -66,18 +65,23 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         for m in data.get("raw_msgs", []):
             try:
                 await m.delete()
-            except Exception as e:
-                log.debug(f"Delete raw single message failed (likely no rights): {e}")
+            except:
+                pass
 
 async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     data = pending_groups.pop(group_id, None)
-    if not data:
+    if not data or not data["media"]:
         return
-    # کپشن + هایپرلینک روی آیتم اول
+
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
-    if data["media"]:
-        data["media"][0].caption = caption
-        data["media"][0].parse_mode = "HTML"
+
+    # آیتم اول با کپشن ساخته می‌شود
+    first = data["media"][0]
+    if isinstance(first, InputMediaPhoto):
+        data["media"][0] = InputMediaPhoto(first.media, caption=caption, parse_mode="HTML")
+    elif isinstance(first, InputMediaVideo):
+        data["media"][0] = InputMediaVideo(first.media, caption=caption, parse_mode="HTML")
+
     try:
         await context.bot.send_media_group(chat_id, media=data["media"])
         log.info(f"Sent media group {group_id} ({len(data['media'])} items) to {chat_id}")
@@ -87,8 +91,8 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
         for m in data.get("raw_msgs", []):
             try:
                 await m.delete()
-            except Exception as e:
-                log.debug(f"Delete raw group message failed (likely no rights): {e}")
+            except:
+                pass
 
 async def single_timer_task(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -110,7 +114,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     if not msg:
         return
-    chat_id = update.effective_chat.id  # اصلاح شد
+    chat_id = update.effective_chat.id
     button_url_in = extract_button_url(msg)
 
     try:
@@ -133,8 +137,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 grp["media"].append(InputMediaPhoto(msg.photo[-1].file_id))
             elif msg.video:
                 grp["media"].append(InputMediaVideo(msg.video.file_id))
-            else:
-                log.debug("Group item ignored (not photo/video)")
 
             if msg.caption and not grp["caption"]:
                 grp["caption"] = msg.caption
@@ -146,7 +148,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if grp["timer"]:
                 grp["timer"].cancel()
             grp["timer"] = asyncio.create_task(group_timer_task(group_id, chat_id, context))
-            log.debug(f"Buffered group {group_id}: {len(grp['media'])} items")
             return
 
         # تک‌مدیا
@@ -167,10 +168,9 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
             t = asyncio.create_task(single_timer_task(chat_id, context))
             pending_single[chat_id]["timer"] = t
-            log.debug(f"Buffered single {pending_single[chat_id]['type']} for {chat_id}")
             return
 
-        # متن (کپشن جدا)
+        # کپشن جدا
         if msg.text:
             text = msg.text
 
@@ -197,7 +197,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if grp["timer"]:
                     grp["timer"].cancel()
                 grp["timer"] = asyncio.create_task(group_timer_task(group_id, chat_id, context))
-                log.debug(f"Attached caption to group {group_id}")
                 return
 
     except Exception as e:
