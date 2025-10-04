@@ -1,10 +1,8 @@
 import os
 import asyncio
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from telegram import (
     Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
     InputMediaPhoto,
     InputMediaVideo,
 )
@@ -24,19 +22,26 @@ PORT = int(os.environ.get("PORT", 5000))
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # Config
-MAX_CAPTION = 1024
-SINGLE_DEBOUNCE_SECS = 3     # منتظر کپشن برای تک‌مدیا
-GROUP_DEBOUNCE_SECS = 2      # جمع‌آوری آیتم‌های آلبوم
+EXTRA_LINK_BLOCK = 60   # فضای رزرو برای "[ OPEN POST ⎋ ] + لینک"
+MAX_CAPTION = 1024 - EXTRA_LINK_BLOCK
+SINGLE_DEBOUNCE_SECS = 3
+GROUP_DEBOUNCE_SECS = 2
 
 # State
-pending_single: Dict[int, Dict] = {}     # key = chat_id
-pending_groups: Dict[str, Dict] = {}     # key = group_id string
-last_group_by_chat: Dict[int, str] = {}  # آخرین گروه مرتبط با هر چت (برای کپشن جدا)
+pending_single: Dict[int, Dict] = {}
+pending_groups: Dict[str, Dict] = {}
+last_group_by_chat: Dict[int, str] = {}
 
-def shorten_caption(text: Optional[str]) -> str:
+def shorten_caption(text: Optional[str], limit: int) -> str:
     if not text:
         return ""
-    return text[:MAX_CAPTION - 3] + "..." if len(text) > MAX_CAPTION else text
+    return text[:limit - 3] + "..." if len(text) > limit else text
+
+def build_caption(base_caption: str, url: Optional[str]) -> str:
+    caption = shorten_caption(base_caption, MAX_CAPTION)
+    if url:
+        caption += f"\n\n[ OPEN POST ⎋ ]\n{url}"
+    return caption
 
 def extract_button_url(msg) -> Optional[str]:
     if not msg or not msg.reply_markup or not msg.reply_markup.inline_keyboard:
@@ -52,15 +57,12 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     if not data:
         return
 
-    caption = shorten_caption(data.get("caption"))
-    button_url = data.get("button_url")
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("مشاهده در اینستاگرام", url=button_url)]]) if button_url else None
-
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
     try:
         if data["type"] == "photo":
-            await context.bot.send_photo(chat_id, photo=data["file_id"], caption=caption, reply_markup=reply_markup)
+            await context.bot.send_photo(chat_id, photo=data["file_id"], caption=caption)
         else:
-            await context.bot.send_video(chat_id, video=data["file_id"], caption=caption, reply_markup=reply_markup)
+            await context.bot.send_video(chat_id, video=data["file_id"], caption=caption)
     finally:
         for m in data.get("raw_msgs", []):
             try:
@@ -73,18 +75,12 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
     if not data:
         return
 
-    media_list = data["media"]
-    caption = shorten_caption(data.get("caption"))
-    button_url = data.get("button_url")
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
+    if data["media"]:
+        data["media"][0].caption = caption
 
     try:
-        # آلبوم را بدون دکمه ارسال کن (تلگرام اجازه دکمه روی آلبوم نمی‌دهد)
-        await context.bot.send_media_group(chat_id, media=media_list)
-
-        # اگر کپشن یا دکمه داریم → پیام جدا
-        if caption or button_url:
-            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("مشاهده در اینستاگرام", url=button_url)]]) if button_url else None
-            await context.bot.send_message(chat_id, text=caption or "مشاهده در اینستاگرام", reply_markup=reply_markup)
+        await context.bot.send_media_group(chat_id, media=data["media"])
     finally:
         for m in data.get("raw_msgs", []):
             try:
@@ -100,7 +96,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = msg.chat_id
     button_url_in = extract_button_url(msg)
 
-    # 1) Media group (آلبوم)
+    # آلبوم
     if msg.media_group_id:
         group_id = f"group_{msg.media_group_id}"
         grp = pending_groups.get(group_id)
@@ -115,34 +111,27 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
         grp["raw_msgs"].append(msg)
 
-        # ذخیره مدیا
         if msg.photo:
             grp["media"].append(InputMediaPhoto(msg.photo[-1].file_id))
         elif msg.video:
             grp["media"].append(InputMediaVideo(msg.video.file_id))
 
-        # کپشن روی یکی از آیتم‌ها (forward شده) یا جدا می‌آید
         if msg.caption and not grp["caption"]:
-            grp["caption"] = msg.caption  # کوتاه‌سازی را هنگام flush انجام می‌دهیم
+            grp["caption"] = msg.caption
 
-        # دکمه اگر در یکی از پیام‌ها باشد
         if button_url_in and not grp["button_url"]:
             grp["button_url"] = button_url_in
 
-        # برای کپشن جدا بعد از آلبوم
         last_group_by_chat[chat_id] = group_id
 
-        # Debounce: هر بار که آیتمی رسید، تایمر را ریست کن
         if grp["timer"]:
             grp["timer"].cancel()
         grp["timer"] = asyncio.create_task(group_timer_task(group_id, chat_id, context))
         return
 
-    # 2) تک‌مدیا (عکس یا ویدیو)
+    # تک‌مدیا
     if msg.photo or msg.video:
-        # اگر قبلاً تک‌مدیا در انتظار بود، اول همان را flush کن تا تداخل نشود
         if chat_id in pending_single:
-            # پیشگیری از مسابقه: اگر تایمر در حال اجراست، کنسل و فوری flush کن
             t = pending_single[chat_id].get("timer")
             if t:
                 t.cancel()
@@ -157,34 +146,27 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "timer": None,
         }
 
-        # اگر کپشن همراه مدیا نبود، منتظر کپشن جدا شو
-        # اگر بود، باز هم ۳ ثانیه صبر می‌کنیم تا شاید کپشن کامل‌تر جدا برسد
         t = asyncio.create_task(single_timer_task(chat_id, context))
         pending_single[chat_id]["timer"] = t
         return
 
-    # 3) متن (احتمالاً کپشن جدا یا پیام دکمه)
+    # کپشن جدا
     if msg.text:
         text = msg.text
 
-        # اگر تک‌مدیا در انتظار داریم → بچسبان و flush
         if chat_id in pending_single:
             data = pending_single[chat_id]
-            # ریست تایمر و ارسال
             t = data.get("timer")
             if t:
                 t.cancel()
-            # به‌روزرسانی کپشن و دکمه (اگر تازه رسید)
             if text:
                 data["caption"] = text
             if button_url_in and not data["button_url"]:
                 data["button_url"] = button_url_in
-            # پیام متن هم جزء raw_msgs برای پاک کردن
             data["raw_msgs"].append(msg)
             await flush_single(chat_id, context)
             return
 
-        # اگر آخرین گروه این چت هنوز باز است → این متن را کپشن گروه در نظر بگیر
         group_id = last_group_by_chat.get(chat_id)
         if group_id and group_id in pending_groups:
             grp = pending_groups[group_id]
@@ -192,14 +174,10 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if button_url_in and not grp["button_url"]:
                 grp["button_url"] = button_url_in
             grp["raw_msgs"].append(msg)
-            # ریست تایمر تا پس از این متن آلبوم ارسال شود
             if grp["timer"]:
                 grp["timer"].cancel()
             grp["timer"] = asyncio.create_task(group_timer_task(group_id, chat_id, context))
             return
-
-        # در غیر این صورت: متن مستقل است (کاری نمی‌کنیم)
-        return
 
 async def single_timer_task(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -214,7 +192,6 @@ async def group_timer_task(group_id: str, chat_id: int, context: ContextTypes.DE
     except asyncio.CancelledError:
         return
     await flush_group(group_id, chat_id, context)
-    # پس از ارسال گروه، پاک‌سازی نشانگر آخرین گروه
     if last_group_by_chat.get(chat_id) == group_id:
         last_group_by_chat.pop(chat_id, None)
 
