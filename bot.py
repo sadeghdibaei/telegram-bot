@@ -22,8 +22,8 @@ PORT = int(os.environ.get("PORT", 5000))
 # ساخت اپلیکیشن
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# حافظه‌ی موقت برای مدیا
-pending_media: Dict[int, Dict] = {}
+# حافظه‌ی موقت
+pending_media: Dict[str, Dict] = {}
 MAX_CAPTION = 1024
 
 def shorten_caption(caption: str) -> str:
@@ -34,26 +34,22 @@ def shorten_caption(caption: str) -> str:
     return caption
 
 async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+    chat_id = str(update.effective_chat.id)
     msg = update.message or update.channel_post
     if not msg:
         return
 
     # اگر آلبوم (media group) بود
     if msg.media_group_id:
-        group_id = msg.media_group_id
+        group_id = f"group_{msg.media_group_id}"
         if group_id not in pending_media:
             pending_media[group_id] = {"media": [], "caption": None, "button_url": None}
 
         # ذخیره مدیا
         if msg.photo:
-            pending_media[group_id]["media"].append(
-                InputMediaPhoto(msg.photo[-1].file_id)
-            )
+            pending_media[group_id]["media"].append(InputMediaPhoto(msg.photo[-1].file_id))
         elif msg.video:
-            pending_media[group_id]["media"].append(
-                InputMediaVideo(msg.video.file_id)
-            )
+            pending_media[group_id]["media"].append(InputMediaVideo(msg.video.file_id))
 
         # ذخیره کپشن (اگر وجود داشت)
         if msg.caption:
@@ -67,20 +63,23 @@ async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT
                         pending_media[group_id]["button_url"] = button.url
                         break
 
-        # وقتی آخرین مدیا رسید → ارسال
-        if len(pending_media[group_id]["media"]) >= 2:  # فرض: آلبوم حداقل 2 مدیا
+        # اگر فکر می‌کنی همه مدیاها رسیدن → ارسال
+        if len(pending_media[group_id]["media"]) >= 2:  # حداقل ۲ مدیا
             data = pending_media.pop(group_id)
-            reply_markup = None
-            if data["button_url"]:
-                reply_markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("مشاهده در اینستاگرام", url=data["button_url"])]
-                ])
-            await context.bot.send_media_group(
-                chat_id,
-                media=data["media"]
-            )
-            if data["caption"]:
-                await context.bot.send_message(chat_id, text=data["caption"], reply_markup=reply_markup)
+            await context.bot.send_media_group(chat_id, media=data["media"])
+
+            # کپشن + دکمه در پیام جدا
+            if data["caption"] or data["button_url"]:
+                reply_markup = None
+                if data["button_url"]:
+                    reply_markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("مشاهده در اینستاگرام", url=data["button_url"])]
+                    ])
+                await context.bot.send_message(
+                    chat_id,
+                    text=data["caption"] or "مشاهده در اینستاگرام",
+                    reply_markup=reply_markup
+                )
         return
 
     # اگر تک‌مدیا بود (عکس یا ویدیو)
@@ -88,7 +87,7 @@ async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT
         pending_media[chat_id] = {
             "file_id": msg.photo[-1].file_id if msg.photo else msg.video.file_id,
             "type": "photo" if msg.photo else "video",
-            "caption": msg.caption if msg.caption else None,
+            "caption": shorten_caption(msg.caption) if msg.caption else None,
             "button_url": None,
         }
 
