@@ -8,9 +8,11 @@ WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+# فقط نگه‌داری موقت به ازای هر گروه؛ بدون حذف پیام
+# pending[chat_id] = {"file_id": str, "ts": float}
 pending = {}
 MAX_CAPTION = 1024
-PENDING_TTL = 180.0  # ثانیه
+TTL = 180.0  # زمان انتظار برای رسیدن متن بعد از ویدیو
 
 def is_video_like(msg):
     if msg.video:
@@ -19,71 +21,62 @@ def is_video_like(msg):
         return msg.document.file_id
     return None
 
-async def send_video_with_caption(bot, chat_id, file_id, caption):
-    if len(caption) > MAX_CAPTION:
-        short_caption = caption[:MAX_CAPTION]
-        rest = caption[MAX_CAPTION:]
-        await bot.send_video(chat_id=chat_id, video=file_id, caption=short_caption)
-        await bot.send_message(chat_id=chat_id, text=rest)
+async def send_video(bot, chat_id, file_id, caption):
+    if caption and len(caption) > MAX_CAPTION:
+        await bot.send_video(chat_id=chat_id, video=file_id, caption=caption[:MAX_CAPTION])
+        await bot.send_message(chat_id=chat_id, text=caption[MAX_CAPTION:])
     else:
-        await bot.send_video(chat_id=chat_id, video=file_id, caption=caption)
+        await bot.send_video(chat_id=chat_id, video=file_id, caption=caption or "")
 
 async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     if not msg:
         return
 
-    chat_id = msg.chat.id
+    chat = msg.chat
+    chat_id = chat.id
+    chat_type = chat.type  # "private", "group", "supergroup", "channel"
 
-    # اگر ویدیو یا داکیومنت ویدیویی بود
-    file_id = is_video_like(msg)
-    if file_id:
-        if msg.caption:
-            await send_video_with_caption(context.bot, chat_id, file_id, msg.caption)
-            try:
-                await msg.delete()
-            except:
-                pass
-            return
-        pending[chat_id] = {
-            "file_id": file_id,
-            "orig_msg_id": msg.message_id,
-            "ts": time.time(),
-        }
+    # فقط گروه‌ها؛ چت خصوصی رو دست نمی‌زنیم تا رفتار قبلی خراب نشه
+    if chat_type not in ("group", "supergroup"):
         return
 
-    # اگر متن بود و ویدیو در انتظار داشتیم
+    # آلبوم‌ها فعلاً نادیده گرفته می‌شن تا بعد جداگانه هندل کنیم
+    if msg.media_group_id:
+        return
+
+    file_id = is_video_like(msg)
+
+    # سناریو 1: ویدیو با کپشن در همان پیام → مستقیم نسخه نهایی را ارسال کن
+    if file_id and msg.caption:
+        await send_video(context.bot, chat_id, file_id, msg.caption)
+        return
+
+    # سناریو 2: ویدیو بدون کپشن → منتظر متن بعدی بمان
+    if file_id and not msg.caption:
+        pending[chat_id] = {"file_id": file_id, "ts": time.time()}
+        return
+
+    # سناریو 3: متن رسید و قبلاً ویدیو منتظر بود → ترکیب و ارسال
     if msg.text and chat_id in pending:
         slot = pending.get(chat_id)
-        if not slot or (time.time() - slot["ts"] > PENDING_TTL):
+        if not slot or (time.time() - slot["ts"] > TTL):
             pending.pop(chat_id, None)
             return
 
         caption = msg.text
-        file_id = slot["file_id"]
-        orig_msg_id = slot["orig_msg_id"]
-
-        await send_video_with_caption(context.bot, chat_id, file_id, caption)
-
+        await send_video(context.bot, chat_id, slot["file_id"], caption)
         pending.pop(chat_id, None)
 
-        try:
-            await context.bot.delete_message(chat_id=chat_id, message_id=orig_msg_id)
-        except:
-            pass
-        try:
-            await msg.delete()
-        except:
-            pass
-
+# فقط message و channel_post را بگیر؛ ادیت‌ها فعلاً لازم نیست
 app.add_handler(MessageHandler(filters.ALL, handler))
 
-print("🤖 Bot is running...")
+print("🤖 Bot is running (group-safe minimal).")
 
 app.run_webhook(
     listen="0.0.0.0",
     port=int(os.environ.get("PORT", 5000)),
     url_path=BOT_TOKEN,
     webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
-    allowed_updates=["message", "channel_post", "edited_message", "edited_channel_post"],
+    allowed_updates=["message", "channel_post"],
 )
