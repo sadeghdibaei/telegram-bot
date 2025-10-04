@@ -43,7 +43,9 @@ async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT
     if msg.media_group_id:
         group_id = f"group_{msg.media_group_id}"
         if group_id not in pending_media:
-            pending_media[group_id] = {"media": [], "caption": None, "button_url": None}
+            pending_media[group_id] = {"media": [], "caption": None, "button_url": None, "raw_msgs": []}
+
+        pending_media[group_id]["raw_msgs"].append(msg)
 
         # ذخیره مدیا
         if msg.photo:
@@ -63,9 +65,11 @@ async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT
                         pending_media[group_id]["button_url"] = button.url
                         break
 
-        # اگر فکر می‌کنی همه مدیاها رسیدن → ارسال
-        if len(pending_media[group_id]["media"]) >= 2:  # حداقل ۲ مدیا
+        # اگر همه مدیاها رسیدن (تشخیص ساده: وقتی آخرین آیتم گروه رسید)
+        if msg.media_group_id and len(pending_media[group_id]["media"]) >= 2:
             data = pending_media.pop(group_id)
+
+            # ارسال آلبوم
             await context.bot.send_media_group(chat_id, media=data["media"])
 
             # کپشن + دکمه در پیام جدا
@@ -80,6 +84,13 @@ async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT
                     text=data["caption"] or "مشاهده در اینستاگرام",
                     reply_markup=reply_markup
                 )
+
+            # پاک کردن پیام‌های اولیه
+            for m in data["raw_msgs"]:
+                try:
+                    await m.delete()
+                except:
+                    pass
         return
 
     # اگر تک‌مدیا بود (عکس یا ویدیو)
@@ -89,6 +100,7 @@ async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT
             "type": "photo" if msg.photo else "video",
             "caption": shorten_caption(msg.caption) if msg.caption else None,
             "button_url": None,
+            "raw_msgs": [msg],
         }
 
         # ذخیره دکمه (اگر وجود داشت)
@@ -115,6 +127,13 @@ async def handle_media_and_caption(update: Update, context: ContextTypes.DEFAULT
             await context.bot.send_photo(chat_id, photo=media["file_id"], caption=caption, reply_markup=reply_markup)
         elif media["type"] == "video":
             await context.bot.send_video(chat_id, video=media["file_id"], caption=caption, reply_markup=reply_markup)
+
+        # پاک کردن پیام‌های اولیه
+        for m in media["raw_msgs"]:
+            try:
+                await m.delete()
+            except:
+                pass
 
 # اضافه کردن هندلر
 app.add_handler(MessageHandler(filters.ALL, handle_media_and_caption))
