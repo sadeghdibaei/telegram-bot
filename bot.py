@@ -43,20 +43,18 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 rest = caption[MAX_CAPTION:]
 
                 # ارسال ویدیو با کپشن کوتاه
-                await context.bot.copy_message(
+                await context.bot.send_video(
                     chat_id=chat_id,
-                    from_chat_id=video_msg.chat_id,
-                    message_id=video_msg.message_id,
+                    video=video_msg.video.file_id,
                     caption=short_caption
                 )
                 # بقیه متن جدا
                 await context.bot.send_message(chat_id=chat_id, text=rest)
             else:
                 # کپشن کوتاه → مستقیم روی ویدیو
-                await context.bot.copy_message(
+                await context.bot.send_video(
                     chat_id=chat_id,
-                    from_chat_id=video_msg.chat_id,
-                    message_id=video_msg.message_id,
+                    video=video_msg.video.file_id,
                     caption=caption
                 )
         finally:
