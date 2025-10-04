@@ -7,11 +7,14 @@ from telegram.ext import (
     filters,
 )
 
+# متغیرهای محیطی
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
+# ساخت اپلیکیشن
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+# حافظه‌ی موقت برای ویدیو
 pending_videos = {}
 MAX_CAPTION = 1024
 
@@ -70,7 +73,7 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # اضافه کردن هندلر
 app.add_handler(MessageHandler(filters.ALL, handler))
 
-print("🤖 بات روی Railway روشن شد...")
+print("🤖 Bot is running on Railway...")
 
 # اجرای وبهوک
 app.run_webhook(
