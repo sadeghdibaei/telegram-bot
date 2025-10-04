@@ -1,5 +1,6 @@
 import os
-from telegram import Update
+import re
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -20,6 +21,13 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 pending_videos: Dict[int, Update] = {}
 MAX_CAPTION = 1024
 
+def extract_instagram_url(text: str) -> str | None:
+    """پیدا کردن اولین لینک اینستاگرام داخل متن"""
+    if not text:
+        return None
+    match = re.search(r"(https?://(?:www\.)?instagram\.com/\S+)", text)
+    return match.group(1) if match else None
+
 async def handle_video_and_caption(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     msg = update.message or update.channel_post
@@ -37,15 +45,26 @@ async def handle_video_and_caption(update: Update, context: ContextTypes.DEFAULT
         caption = msg.text
 
         try:
-            # اگر کپشن طولانی‌تر از حد مجاز بود → برش + سه نقطه
+            # کوتاه‌سازی کپشن در صورت نیاز
             if len(caption) > MAX_CAPTION:
                 caption = caption[:MAX_CAPTION - 3] + "..."
 
-            # ارسال فقط یک پیام (ویدیو + کپشن)
+            # پیدا کردن لینک اینستاگرام
+            instagram_url = extract_instagram_url(msg.text)
+
+            # ساخت دکمه اگر لینک وجود داشت
+            reply_markup = None
+            if instagram_url:
+                reply_markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("مشاهده در اینستاگرام", url=instagram_url)]
+                ])
+
+            # ارسال ویدیو + کپشن + دکمه (اگر بود)
             await context.bot.send_video(
                 chat_id,
                 video=video_msg.video.file_id,
-                caption=caption
+                caption=caption,
+                reply_markup=reply_markup
             )
 
         finally:
