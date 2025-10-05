@@ -21,7 +21,7 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 EXTRA_LINK_BLOCK = 60
 MAX_CAPTION = 1024 - EXTRA_LINK_BLOCK
 SINGLE_DEBOUNCE_SECS = 3
-GROUP_DEBOUNCE_SECS = 2
+GROUP_DEBOUNCE_SECS = 5
 
 # State
 pending_single: Dict[int, Dict] = {}
