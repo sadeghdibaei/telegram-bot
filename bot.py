@@ -1,7 +1,6 @@
 import os
 import asyncio
 import logging
-import re
 from typing import Dict, Optional
 from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
@@ -29,18 +28,10 @@ pending_single: Dict[int, Dict] = {}
 pending_groups: Dict[str, Dict] = {}
 last_group_by_chat: Dict[int, str] = {}
 
-URL_REGEX = re.compile(r"(https?://\S+)")
-
 def shorten_caption(text: Optional[str], limit: int) -> str:
     if not text:
         return ""
     return text[:limit - 3] + "..." if len(text) > limit else text
-
-def extract_url(text: Optional[str]) -> Optional[str]:
-    if not text:
-        return None
-    m = URL_REGEX.search(text)
-    return m.group(1) if m else None
 
 def build_caption(base_caption: str, url: Optional[str]) -> str:
     caption = shorten_caption(base_caption, MAX_CAPTION)
@@ -48,17 +39,28 @@ def build_caption(base_caption: str, url: Optional[str]) -> str:
         caption += f"\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
     return caption
 
+def extract_button_url(msg) -> Optional[str]:
+    if not msg or not msg.reply_markup or not msg.reply_markup.inline_keyboard:
+        return None
+    for row in msg.reply_markup.inline_keyboard:
+        for btn in row:
+            if getattr(btn, "url", None):
+                return btn.url
+    return None
+
 async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     data = pending_single.pop(chat_id, None)
     if not data:
         return
-    caption = build_caption(data.get("caption") or "", data.get("url"))
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
     try:
         if data["type"] == "photo":
             await context.bot.send_photo(chat_id, photo=data["file_id"], caption=caption, parse_mode="HTML")
         else:
             await context.bot.send_video(chat_id, video=data["file_id"], caption=caption, parse_mode="HTML")
         log.info(f"Sent single {data['type']} to {chat_id}")
+    except Exception as e:
+        log.error(f"Failed to send single media: {e}")
     finally:
         for m in data.get("raw_msgs", []):
             try:
@@ -70,15 +72,21 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
     data = pending_groups.pop(group_id, None)
     if not data or not data["media"]:
         return
-    caption = build_caption(data.get("caption") or "", data.get("url"))
+
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
+
+    # آیتم اول با کپشن ساخته می‌شود
     first = data["media"][0]
     if isinstance(first, InputMediaPhoto):
         data["media"][0] = InputMediaPhoto(first.media, caption=caption, parse_mode="HTML")
     elif isinstance(first, InputMediaVideo):
         data["media"][0] = InputMediaVideo(first.media, caption=caption, parse_mode="HTML")
+
     try:
         await context.bot.send_media_group(chat_id, media=data["media"])
-        log.info(f"Sent media group {group_id} ({len(data['media'])}) to {chat_id}")
+        log.info(f"Sent media group {group_id} ({len(data['media'])} items) to {chat_id}")
+    except Exception as e:
+        log.error(f"Failed to send media group {group_id}: {e}")
     finally:
         for m in data.get("raw_msgs", []):
             try:
@@ -107,6 +115,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg:
         return
     chat_id = update.effective_chat.id
+    button_url_in = extract_button_url(msg)
 
     try:
         # آلبوم
@@ -117,7 +126,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 grp = pending_groups[group_id] = {
                     "media": [],
                     "caption": None,
-                    "url": None,
+                    "button_url": None,
                     "raw_msgs": [],
                     "timer": None,
                     "chat_id": chat_id,
@@ -129,12 +138,10 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif msg.video:
                 grp["media"].append(InputMediaVideo(msg.video.file_id))
 
-            # کپشن یا URL از متن/کپشن
             if msg.caption and not grp["caption"]:
                 grp["caption"] = msg.caption
-                url_in = extract_url(msg.caption)
-                if url_in and not grp["url"]:
-                    grp["url"] = url_in
+            if button_url_in and not grp["button_url"]:
+                grp["button_url"] = button_url_in
 
             last_group_by_chat[chat_id] = group_id
 
@@ -155,7 +162,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "file_id": msg.photo[-1].file_id if msg.photo else msg.video.file_id,
                 "type": "photo" if msg.photo else "video",
                 "caption": msg.caption or None,
-                "url": extract_url(msg.caption) if msg.caption else None,
+                "button_url": button_url_in or None,
                 "raw_msgs": [msg],
                 "timer": None,
             }
@@ -163,10 +170,9 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending_single[chat_id]["timer"] = t
             return
 
-        # متن (مثلاً کپشن جدا یا پیام URL)
+        # کپشن جدا
         if msg.text:
             text = msg.text
-            url_in = extract_url(text)
 
             if chat_id in pending_single:
                 data = pending_single[chat_id]
@@ -175,8 +181,8 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     t.cancel()
                 if text:
                     data["caption"] = text
-                if url_in and not data.get("url"):
-                    data["url"] = url_in
+                if button_url_in and not data["button_url"]:
+                    data["button_url"] = button_url_in
                 data["raw_msgs"].append(msg)
                 await flush_single(chat_id, context)
                 return
@@ -185,8 +191,8 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if group_id and group_id in pending_groups:
                 grp = pending_groups[group_id]
                 grp["caption"] = text
-                if url_in and not grp.get("url"):
-                    grp["url"] = url_in
+                if button_url_in and not grp["button_url"]:
+                    grp["button_url"] = button_url_in
                 grp["raw_msgs"].append(msg)
                 if grp["timer"]:
                     grp["timer"].cancel()
@@ -199,9 +205,9 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Handler
 app.add_handler(MessageHandler(filters.ALL, handle))
 
-log.info("🤖 Bot is running...")
+log.info("🤖 Bot is running on Railway...")
 
-# Webhook (بدون aiohttp)
+# Webhook
 app.run_webhook(
     listen="0.0.0.0",
     port=PORT,
