@@ -66,8 +66,8 @@ def clean_caption(text: Optional[str]) -> str:
 
 def build_caption(base_caption: str, url: Optional[str]) -> str:
     """کپشن نهایی را با لینک انتهایی می‌سازد."""
-    cleaned = clean_caption(base_caption)
-    caption = shorten_caption(base_caption, MAX_CAPTION)
+    cleaned = clean_caption(base_caption)   # 👈 اول پاکسازی
+    caption = shorten_caption(cleaned, MAX_CAPTION)  # 👈 روی متن پاک‌شده کوتاه کن
     if url:
         caption += f"\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
     return caption
