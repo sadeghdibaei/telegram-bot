@@ -37,7 +37,7 @@ MAX_CAPTION = 1024 - EXTRA_LINK_BLOCK
 
 # تاخیر برای جمع‌آوری پیام‌ها پیش از ارسال (debounce)
 SINGLE_DEBOUNCE_SECS = 3
-GROUP_DEBOUNCE_SECS = 3
+GROUP_DEBOUNCE_SECS = 4
 
 # ---------------------------
 # State buffers
