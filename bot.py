@@ -52,6 +52,12 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     data = pending_single.pop(chat_id, None)
     if not data:
         return
+
+    # اگر کپشن وجود نداره، ارسال نکن
+    if not data.get("caption"):
+        log.info(f"Skip single media in {chat_id} (no caption yet)")
+        return
+
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
     try:
         if data["type"] == "photo":
@@ -71,6 +77,11 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
 async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     data = pending_groups.pop(group_id, None)
     if not data or not data["media"]:
+        return
+
+    # اگر کپشن وجود نداره، ارسال نکن
+    if not data.get("caption"):
+        log.info(f"Skip media group {group_id} in {chat_id} (no caption yet)")
         return
 
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
