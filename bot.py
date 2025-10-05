@@ -53,12 +53,13 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     if not data:
         return
 
+    # اگر کپشن وجود نداره، ارسال نکن
     if not data.get("caption"):
         log.info(f"Skip single media in {chat_id} (no caption yet)")
         return
 
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
-    log.info(f"Flushing single {data['type']} to {chat_id}")
+    log.info(f"Flushing single {data['type']} to {chat_id} | file_id={data['file_id']}")
 
     try:
         if data["type"] == "photo":
@@ -72,15 +73,16 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         for m in data.get("raw_msgs", []):
             try:
                 await m.delete()
-                log.info(f"Deleted raw message {getattr(m,'message_id',None)} in {chat_id}")
+                log.info(f"Deleted raw message {getattr(m, 'message_id', None)} in {chat_id}")
             except Exception as e:
-                log.warning(f"Could not delete raw message {getattr(m,'message_id',None)} in {chat_id}: {e}")
+                log.warning(f"Could not delete raw message {getattr(m, 'message_id', None)} in {chat_id}: {e}")
 
 async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     data = pending_groups.pop(group_id, None)
     if not data or not data["media"]:
         return
 
+    # اگر کپشن وجود نداره، ارسال نکن
     if not data.get("caption"):
         log.info(f"Skip media group {group_id} in {chat_id} (no caption yet)")
         return
@@ -88,6 +90,7 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
     log.info(f"Flushing media group {group_id} ({len(data['media'])} items) to {chat_id}")
 
+    # آیتم اول با کپشن ساخته می‌شود
     first = data["media"][0]
     if isinstance(first, InputMediaPhoto):
         data["media"][0] = InputMediaPhoto(first.media, caption=caption, parse_mode="HTML")
@@ -103,12 +106,12 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
         for m in data.get("raw_msgs", []):
             try:
                 await m.delete()
-                log.info(f"Deleted raw message {getattr(m,'message_id',None)} in {chat_id}")
+                log.info(f"Deleted raw message {getattr(m, 'message_id', None)} in {chat_id}")
             except Exception as e:
-                log.warning(f"Could not delete raw message {getattr(m,'message_id',None)} in {chat_id}: {e}")
+                log.warning(f"Could not delete raw message {getattr(m, 'message_id', None)} in {chat_id}: {e}")
 
 async def single_timer_task(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    log.info(f"Starting single debounce timer for chat {chat_id}")
+    log.info(f"Starting single debounce timer for chat {chat_id} ({SINGLE_DEBOUNCE_SECS}s)")
     try:
         await asyncio.sleep(SINGLE_DEBOUNCE_SECS)
     except asyncio.CancelledError:
@@ -117,7 +120,7 @@ async def single_timer_task(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     await flush_single(chat_id, context)
 
 async def group_timer_task(group_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    log.info(f"Starting group debounce timer for {group_id} in chat {chat_id}")
+    log.info(f"Starting group debounce timer for {group_id} in chat {chat_id} ({GROUP_DEBOUNCE_SECS}s)")
     try:
         await asyncio.sleep(GROUP_DEBOUNCE_SECS)
     except asyncio.CancelledError:
@@ -215,4 +218,36 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if text:
                     data["caption"] = text
                 if button_url_in and not data["button_url"]:
-                    data["
+                    data["button_url"] = button_url_in
+                data["raw_msgs"].append(msg)
+                await flush_single(chat_id, context)
+                return
+
+            group_id = last_group_by_chat.get(chat_id)
+            if group_id and group_id in pending_groups:
+                grp = pending_groups[group_id]
+                grp["caption"] = text
+                if button_url_in and not grp["button_url"]:
+                    grp["button_url"] = button_url_in
+                grp["raw_msgs"].append(msg)
+                if grp["timer"]:
+                    grp["timer"].cancel()
+                    log.info(f"Cancelled group timer for {group_id} (caption arrived)")
+                grp["timer"] = asyncio.create_task(group_timer_task(group_id, chat_id, context))
+                return
+
+    except Exception as e:
+        log.error(f"Handle failed in chat {chat_id}: {e}")
+
+# Handler
+app.add_handler(MessageHandler(filters.ALL, handle))
+
+log.info("🤖 Bot is running on Railway...")
+
+# Webhook
+app.run_webhook(
+    listen="0.0.0.0",
+    port=PORT,
+    url_path=BOT_TOKEN,
+    webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+)
