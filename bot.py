@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import sys
 from typing import Dict, Optional
 from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
@@ -9,7 +10,10 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 # Logging setup
 # ---------------------------
 # سطح لاگ INFO برای دیدن جریان کار. فرمت ساده و خوانا.
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(message)s",
+                    stream=sys.stdout
+                   )
 log = logging.getLogger("relay-bot")
 
 # ---------------------------
