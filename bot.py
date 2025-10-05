@@ -92,10 +92,10 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         log.info(f"⏭ No pending single for chat {chat_id}")
         return
 
-    # اگر کپشن نداریم، ارسال نکنیم
-    if not data.get("caption"):
-        log.info(f"⏭ Skip single media in {chat_id} (no caption yet)")
-        return
+    caption_text = data.get("caption") or ""   # 👈 اگر کپشن نبود، رشته خالی
+    caption = build_caption(caption_text, data.get("button_url"))
+    log.info(f"🚀 Flushing single {data['type']} to {chat_id} (caption={'yes' if caption_text else 'no'})")
+
 
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
     log.info(f"🚀 Flushing single {data['type']} to {chat_id} | file_id={data['file_id']}")
@@ -128,10 +128,10 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
         log.info(f"⏭ No pending media for group {group_id} in chat {chat_id}")
         return
 
-    # اگر کپشن نداریم، ارسال نکنیم
-    if not data.get("caption"):
-        log.info(f"⏭ Skip media group {group_id} in {chat_id} (no caption yet)")
-        return
+    caption_text = data.get("caption") or ""
+    caption = build_caption(caption_text, data.get("button_url"))
+    log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id} (caption={'yes' if caption_text else 'no'})")
+
 
     caption = build_caption(data.get("caption") or "", data.get("button_url"))
     log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id}")
