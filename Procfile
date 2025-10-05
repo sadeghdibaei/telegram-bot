@@ -1,2 +1,2 @@
-worker: python bot.py
-forwarder: python userbot_forwarder.py
+web: python bot.py
+worker: python userbot_forwarder.py
