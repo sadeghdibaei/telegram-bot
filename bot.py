@@ -58,8 +58,15 @@ def shorten_caption(text: Optional[str], limit: int) -> str:
         return ""
     return text[:limit - 3] + "..." if len(text) > limit else text
 
+def clean_caption(text: Optional[str]) -> str:
+    if not text:
+        return ""
+    # عبارت ناخواسته رو حذف می‌کنیم
+    return text.replace("🤖 Downloaded with @iDownloadersBot", "").strip()
+
 def build_caption(base_caption: str, url: Optional[str]) -> str:
     """کپشن نهایی را با لینک انتهایی می‌سازد."""
+    cleaned = clean_caption(base_caption)
     caption = shorten_caption(base_caption, MAX_CAPTION)
     if url:
         caption += f"\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
