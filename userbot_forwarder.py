@@ -92,6 +92,22 @@ async def relay_and_buffer(client, message):
     except Exception as e:
         print("❌ Handler error:", e)
 
+from pyrogram import filters
+
+@app.on_message(filters.text)
+async def forward_instagram_links(client, message):
+    if "instagram.com" in message.text.lower():
+        try:
+            await client.send_message("iDownloadersBot", message.text)
+            print(f"📤 Sent Instagram link from {message.chat.id} to iDownloadersBot")
+
+            # حذف پیام اصلی
+            await asyncio.sleep(1)  # یه تأخیر کوچیک برای اطمینان
+            await message.delete()
+            print("🗑️ Original message deleted")
+
+        except Exception as e:
+            print("❌ Failed to forward/delete:", e)
 
 print("👤 Userbot relay with smart buffer is running...")
 app.run()
