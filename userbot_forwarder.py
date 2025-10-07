@@ -16,6 +16,10 @@ app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION
 # بافر برای گروه مقصد
 pending = defaultdict(lambda: {"album": [], "caption": None, "raw_msgs": [], "timer": None})
 
+@app.on_message(filters.group)
+async def log_group_id(client, message):
+    print(f"📌 Group ID: {message.chat.id} | Title: {message.chat.title}")
+
 async def flush_buffer(client, chat_id):
     data = pending.get(chat_id)
     if not data:
