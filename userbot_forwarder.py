@@ -9,31 +9,10 @@ API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
 
 # آیدی عددی گروهی که بات اصلی اونجاست
-TARGET_GROUP_ID = -1001234567890
+TARGET_GROUP_ID = -4829295138
 
 app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# هندلر چاپ آیدی گروه
-@app.on_message(filters.group)
-async def print_group_info(client, message):
-    print(f"📌 Group ID: {message.chat.id} | Title: {message.chat.title}")
-
-# هندلر تست ارسال پیام
-@app.on_message(filters.command("test", prefixes=["/", "!"]))
-async def test_send(client, message):
-    await client.send_message(TARGET_GROUP_ID, "🧪 تست ارسال به گروه")
-    print("✅ پیام تست ارسال شد")
-
-# هندلر تشخیص لینک اینستاگرام
-@app.on_message(filters.text)
-async def detect_instagram_link(client, message):
-    ...
-
-# هندلر دریافت پاسخ از iDownloadersBot
-@app.on_message()
-async def relay_and_buffer(client, message):
-    ...
-    
 # بافر برای گروه مقصد
 pending = defaultdict(lambda: {"album": [], "caption": None, "raw_msgs": [], "timer": None})
 
