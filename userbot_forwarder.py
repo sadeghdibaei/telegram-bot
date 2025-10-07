@@ -9,7 +9,7 @@ API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
 
 # آیدی عددی گروهی که بات اصلی اونجاست
-TARGET_GROUP_ID = -4829295138
+TARGET_GROUP_ID = int(os.getenv("TARGET_GROUP_ID"))
 
 app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
