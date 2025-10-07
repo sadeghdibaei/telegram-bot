@@ -1,38 +1,21 @@
 import os
 import asyncio
 from collections import defaultdict
-from pyrogram import Client, filters
+from pyrogram import Client
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
-print("🚀 شروع اجرای یوزربات...")
-
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-SESSION_STRING = os.getenv("SESSION_STRING")
-TARGET_GROUP_ID = int(os.getenv("TARGET_GROUP_ID"))
+API_ID = int(os.environ["API_ID"])
+API_HASH = os.environ["API_HASH"]
+SESSION_STRING = os.environ["SESSION_STRING"]
 
 app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# بافر برای گروه مقصد
+# بافر برای هر چت
 pending = defaultdict(lambda: {"album": [], "caption": None, "raw_msgs": [], "timer": None})
-
-@app.on_message(filters.group)
-async def forward_bot_messages(client, message):
-    if message.from_user and message.from_user.is_bot:
-        try:
-            await client.forward_messages(TARGET_GROUP_ID, message.chat.id, message.id)
-            print(f"✅ پیام بات فوروارد شد: {message.text or 'مدیا'}")
-        except Exception as e:
-            print(f"❌ خطا در فوروارد پیام بات: {type(e).__name__} - {e}")
-
-@app.on_message(filters.group)
-async def log_group_id(client, message):
-    print(f"📌 Group ID: {message.chat.id} | Title: {message.chat.title}")
 
 async def flush_buffer(client, chat_id):
     data = pending.get(chat_id)
     if not data:
-        print("⚠️ بافر خالیه، ارسال انجام نشد")
         return
 
     album = data["album"]
@@ -40,7 +23,7 @@ async def flush_buffer(client, chat_id):
     raw_msgs = data["raw_msgs"]
 
     try:
-        # ارسال آلبوم
+        # اول آلبوم
         if album:
             media = []
             for m in album:
@@ -48,22 +31,18 @@ async def flush_buffer(client, chat_id):
                     media.append(InputMediaPhoto(m.photo.file_id))
                 elif m.video:
                     media.append(InputMediaVideo(m.video.file_id))
-            if media:
-                await client.send_media_group(chat_id, media)
-                print(f"✅ آلبوم ارسال شد با {len(media)} آیتم")
-            else:
-                print("⚠️ هیچ مدیای معتبری برای ارسال نبود")
+            await client.send_media_group(chat_id, media)
+            print(f"✅ Sent album with {len(album)} items")
 
-        # ارسال کپشن (فوروارد)
+        # بعد کپشن
         if caption:
-            await client.forward_messages(chat_id, caption.chat.id, caption.id)
-            print("✅ کپشن فوروارد شد")
+            await client.forward_messages(chat_id, chat_id, caption.id)
+            print("✅ Forwarded caption")
 
     except Exception as e:
-        print(f"❌ خطا در flush_buffer: {type(e).__name__} - {e}")
-        return  # بافر رو پاک نکن
+        print("❌ Flush error:", e)
 
-    # حذف پیام‌های خام
+    # پاک کردن پیام‌های خام
     await asyncio.sleep(1)
     for m in raw_msgs:
         try:
@@ -73,61 +52,46 @@ async def flush_buffer(client, chat_id):
 
     # ریست بافر
     pending.pop(chat_id, None)
-    print("🔄 بافر ریست شد")
+
 
 async def wait_and_flush(client, chat_id, delay=30):
     await asyncio.sleep(delay)
+    # اگر بعد از ۳۰ ثانیه هنوز flush نشده، هرچی هست رو بفرست
     await flush_buffer(client, chat_id)
 
-# هندلر تست ارسال به گروه
-@app.on_message(filters.command("test", prefixes=["/", "!"]))
-async def test_send_to_group(client, message):
-    try:
-        print(f"🧪 تست ارسال به گروه: {TARGET_GROUP_ID}")
-        await client.send_message(TARGET_GROUP_ID, "🧪 تست موفق! یوزربات تونست پیام بفرسته.")
-        print("✅ تست ارسال به گروه انجام شد")
-    except Exception as e:
-        print(f"❌ تست ارسال به گروه شکست خورد: {type(e).__name__} - {e}")
 
-# هندلر گرفتن آیدی گروه برای تشخیص دقیق
-@app.on_message(filters.group)
-async def log_group_id(client, message):
-    print(f"📌 Group ID: {message.chat.id} | Title: {message.chat.title}")
-
-# هندلر تشخیص لینک اینستاگرام
-@app.on_message(filters.text)
-async def detect_instagram_link(client, message):
-    if "instagram.com" in message.text.lower():
-        try:
-            link = message.text.strip()
-            await client.send_message("iDownloadersBot", link)
-            print(f"📨 لینک ارسال شد به iDownloadersBot: {link}")
-        except Exception as e:
-            print(f"❌ خطا در ارسال لینک: {type(e).__name__} - {e}")
-
-# هندلر دریافت پاسخ از iDownloadersBot
 @app.on_message()
 async def relay_and_buffer(client, message):
     try:
-        if not message.from_user or message.from_user.username != "iDownloadersBot":
+        sender = message.from_user.username if message.from_user else None
+        if sender != "iDownloadersBot":
             return
 
-        chat_id = TARGET_GROUP_ID
+        chat_id = message.chat.id
         data = pending[chat_id]
+
+        # ذخیره پیام خام
         data["raw_msgs"].append(message)
 
+        # مدیا
         if message.media_group_id or message.photo or message.video:
             data["album"].append(message)
+
+        # کپشن
         elif message.text:
             data["caption"] = message
 
+        # اگر هم آلبوم و هم کپشن داریم → فوری flush
         if data["album"] and data["caption"]:
             await flush_buffer(client, chat_id)
+
+        # اگر تایمر فعال نیست → بذار
         elif not data["timer"]:
             data["timer"] = asyncio.create_task(wait_and_flush(client, chat_id))
 
     except Exception as e:
-        print(f"❌ خطا در relay_and_buffer: {type(e).__name__} - {e}")
+        print("❌ Handler error:", e)
 
-print("👤 یوزربات آماده‌ست و منتظر لینک‌های اینستاگرام...")
+
+print("👤 Userbot relay with smart buffer is running...")
 app.run()
