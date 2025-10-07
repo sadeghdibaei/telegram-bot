@@ -7,12 +7,18 @@ from pyrogram.types import InputMediaPhoto, InputMediaVideo
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
-
-# آیدی عددی گروهی که بات اصلی اونجاست
 TARGET_GROUP_ID = int(os.getenv("TARGET_GROUP_ID"))
 
 app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
+@app.on_message(filters.command("test", prefixes=["/", "!"]))
+async def test_send_to_group(client, message):
+    try:
+        await client.send_message(TARGET_GROUP_ID, "🧪 تست موفق! یوزربات تونست پیام بفرسته.")
+        print("✅ تست ارسال به گروه انجام شد")
+    except Exception as e:
+        print("❌ تست ارسال به گروه شکست خورد:", e)
+        
 # بافر برای گروه مقصد
 pending = defaultdict(lambda: {"album": [], "caption": None, "raw_msgs": [], "timer": None})
 
