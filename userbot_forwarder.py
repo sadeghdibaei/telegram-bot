@@ -11,6 +11,10 @@ TARGET_GROUP_ID = int(os.getenv("TARGET_GROUP_ID"))
 
 app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
+@app.on_message(filters.group)
+async def print_group_info(client, message):
+    print(f"📌 Group ID: {message.chat.id} | Title: {message.chat.title}")
+    
 @app.on_message(filters.command("test", prefixes=["/", "!"]))
 async def test_send_to_group(client, message):
     try:
