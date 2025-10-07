@@ -32,7 +32,8 @@ async def detect_instagram_link(client, message):
 # هندلر دریافت پاسخ از iDownloadersBot
 @app.on_message()
 async def relay_and_buffer(client, message):
-
+    ...
+    
 # بافر برای گروه مقصد
 pending = defaultdict(lambda: {"album": [], "caption": None, "raw_msgs": [], "timer": None})
 
