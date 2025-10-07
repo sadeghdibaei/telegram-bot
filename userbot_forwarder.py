@@ -17,6 +17,15 @@ app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION
 pending = defaultdict(lambda: {"album": [], "caption": None, "raw_msgs": [], "timer": None})
 
 @app.on_message(filters.group)
+async def forward_bot_messages(client, message):
+    if message.from_user and message.from_user.is_bot:
+        try:
+            await client.forward_messages(TARGET_GROUP_ID, message.chat.id, message.id)
+            print(f"✅ پیام بات فوروارد شد: {message.text or 'مدیا'}")
+        except Exception as e:
+            print(f"❌ خطا در فوروارد پیام بات: {type(e).__name__} - {e}")
+
+@app.on_message(filters.group)
 async def log_group_id(client, message):
     print(f"📌 Group ID: {message.chat.id} | Title: {message.chat.title}")
 
