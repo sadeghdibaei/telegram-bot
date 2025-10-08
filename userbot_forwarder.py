@@ -34,6 +34,31 @@ def clean_caption(text: str) -> str:
     return text.strip()
 
 # ---------------------------
+# Utility: Forward inline buttons to Saved Messages
+# ---------------------------
+async def forward_inline_buttons_to_me(client: Client, message: Message):
+    if not message.reply_markup:
+        return
+
+    lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
+    for row_index, row in enumerate(message.reply_markup.inline_keyboard):
+        for col_index, btn in enumerate(row):
+            label = btn.text
+            url = getattr(btn, "url", None)
+            callback = getattr(btn, "callback_data", None)
+
+            line = f"▪️ [{row_index},{col_index}] '{label}'"
+            if url:
+                line += f"\n   🌐 URL: {url}"
+            if callback:
+                line += f"\n   📦 Callback: {callback}"
+            lines.append(line)
+
+    summary = "\n".join(lines)
+    await client.send_message("me", summary)
+    print("📤 Sent inline button summary to Saved Messages")
+
+# ---------------------------
 # Step 1: Detect Instagram link in group
 # ---------------------------
 @app.on_message(filters.group & filters.text)
@@ -113,6 +138,7 @@ async def handle_bot_response(client: Client, message: Message):
 # ---------------------------
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
+    await forward_inline_buttons_to_me(client, message)
     try:
         # مرحله انتخاب گزینه‌ی Default
         if "rename" in message.text.lower() and message.reply_markup:
