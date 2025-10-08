@@ -1,7 +1,13 @@
 import os
 import re
 from pyrogram import Client, filters
-from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import (
+    Message,
+    InputMediaPhoto,
+    InputMediaVideo,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
 
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
@@ -45,7 +51,7 @@ async def handle_instagram_link(client: Client, message: Message):
 async def handle_bot_response(client: Client, message: Message):
     try:
         for group_id, link in last_instagram_link.items():
-            # اگر پیام مدیاست، بافرش کن
+            # بافر مدیا
             if message.photo:
                 media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
                 print("📥 Buffered photo")
@@ -54,25 +60,24 @@ async def handle_bot_response(client: Client, message: Message):
                 media_buffer.append(InputMediaVideo(media=message.video.file_id))
                 print("📥 Buffered video")
 
-            # اگر پیام متنیه، یعنی آلبوم تموم شده
+            # پیام متنی = پایان آلبوم
             elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
                 keyboard = InlineKeyboardMarkup(
                     [[InlineKeyboardButton("O P E N P O S T ⎋", url=link)]]
                 )
 
-                # اول آلبوم رو بفرست
+                # ارسال آلبوم
                 if media_buffer:
                     await client.send_media_group(group_id, media=media_buffer)
                     print("📤 Sent media group")
                     media_buffer.clear()
 
-                # بعدش کپشن رو جداگانه با دکمه بفرست
+                # ارسال کپشن با دکمه
                 if cleaned:
                     await client.send_message(
                         group_id,
                         cleaned,
-                        parse_mode="HTML",
                         reply_markup=keyboard
                     )
                     print("📥 Sent caption with button")
