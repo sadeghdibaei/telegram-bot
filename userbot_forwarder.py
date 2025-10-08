@@ -44,6 +44,18 @@ def has_default_button(message: Message) -> bool:
             if "default" in btn.text.lower():
                 return True
     return False
+
+# ---------------------------
+# Utility: Detect presence of 'Default' button in inline keyboard
+# ---------------------------
+def has_default_button(message: Message) -> bool:
+    if not message.reply_markup:
+        return False
+    for row in message.reply_markup.inline_keyboard:
+        for btn in row:
+            if "default" in btn.text.lower():
+                return True
+    return False
     
 # ---------------------------
 # Utility: Forward inline buttons to Saved Messages
@@ -202,9 +214,8 @@ async def handle_upload_response(client: Client, message: Message):
             return
 
         # رد کردن پیام‌های غیرمفید
-        if message.photo or "processing" in message.text.lower() or "۴ دقیقه" in message.text:
-            print("⏭ Skipped non-actionable message from @urluploadxbot")
-            return
+        print(f"⏭ Skipped message: {message.text[:50]}")
+        return
 
     except Exception as e:
         print("❌ Error handling upload response:", e)
