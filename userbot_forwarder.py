@@ -80,28 +80,6 @@ async def handle_bot_response(client: Client, message: Message):
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
 
-@app.on_message(filters.private & filters.command("testbutton"))
-async def test_button(client: Client, message: Message):
-    try:
-        # آی‌دی گروه رو مستقیم بذار—not از message.chat.id
-        group_id = -1003183210016  # همین آی‌دی که گفتی معتبره
-
-        link = "https://www.instagram.com/reel/DODEbrsiJQb/?igsh=MWFiYmIzY2RwYnV0ag=="
-        keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("مشاهده در اینستاگرام", url=link)]]
-        )
-
-        await client.send_message(
-            group_id,
-            "⬇️ تست دکمه شیشه‌ای",
-            reply_markup=keyboard
-        )
-
-        await message.reply("✅ پیام تستی با دکمه ارسال شد")
-
-    except Exception as e:
-        await message.reply(f"❌ خطا در ارسال: {e}")
-
 
 print("🧪 Userbot relay with album + caption + button is running...")
 app.run()
