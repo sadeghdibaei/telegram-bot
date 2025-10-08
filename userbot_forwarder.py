@@ -114,6 +114,21 @@ async def handle_instagram_link(client: Client, message: Message):
 @app.on_message(filters.private & filters.user("iDownloadersBot"))
 async def handle_bot_response(client: Client, message: Message):
     try:
+        # مرحله فوری: اگر پیام شامل "Please wait..." بود، ارسال و حذف بعدی
+        if message.text and "please wait" in message.text.lower():
+            import re
+            match = re.search(r"please wait (\d+) second", message.text.lower())
+            wait_seconds = int(match.group(1)) if match else 11
+    
+            for group_id in last_instagram_link:
+                temp_msg = await client.send_message(group_id, message.text)
+    
+                import asyncio
+                await asyncio.sleep(min(wait_seconds, 15))  # محدود به ۱۵ ثانیه برای اطمینان
+                await client.delete_messages(group_id, temp_msg.id)
+    
+            return
+
         for group_id, link in last_instagram_link.items():
 
             # مرحله ۱: بررسی وجود دکمه‌ها
@@ -179,27 +194,28 @@ async def handle_bot_response(client: Client, message: Message):
                 print("📥 Buffered video")
 
             # مرحله ۷: اگر کپشن داشت، ارسال همراه با مدیا
-            elif message.text or message.caption:
+            if message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
                 raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
-
+            
                 MAX_MEDIA_PER_GROUP = 10
-
+            
                 if media_buffer:
                     # تقسیم آلبوم به دسته‌های 10‌تایی
                     chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
-                
+            
                     for index, chunk in enumerate(chunks):
                         await client.send_media_group(group_id, media=chunk)
                         print(f"📤 Sent media group chunk {index + 1}/{len(chunks)}")
-                
+            
                     # ارسال کپشن نهایی بعد از آخرین chunk
                     await client.send_message(group_id, final_caption)
                     print("📥 Sent caption with link")
-                
+            
                     media_buffer.clear()
+                    return  # جلوگیری از اجرای مرحله شکست
                 else:
                     print("⚠️ No media found, caption skipped")
 
