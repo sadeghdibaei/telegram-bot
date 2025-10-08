@@ -263,27 +263,30 @@ async def handle_upload_response(client: Client, message: Message):
 
         if message.video:
             for group_id, state in upload_state.items():
+                # حذف پیام‌های موقت
+                cdn_notice_id = state.get("cdn_notice_id")
+                if cdn_notice_id:
+                    await client.delete_messages(group_id, cdn_notice_id)
+        
+                processing_msg_id = state.get("processing_msg_id")
+                if processing_msg_id:
+                    await client.delete_messages(group_id, processing_msg_id)
+        
+                # ساخت کپشن نهایی
                 link = state.get("link")
                 cleaned = state.get("caption", "")
                 raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
-
-                cdn_notice_id = state.get("cdn_notice_id")
-                if cdn_notice_id:
-                    await client.delete_messages(group_id, cdn_notice_id)
-                
-                processing_msg_id = state.get("processing_msg_id")
-                if processing_msg_id:
-                    await client.delete_messages(group_id, processing_msg_id)
-
+        
+                # ارسال ویدیو با کپشن نهایی
                 await client.send_video(
                     group_id,
                     video=message.video.file_id,
                     caption=final_caption
                 )
                 print("📥 Final video + caption sent")
-
+        
             upload_state.clear()
             return
 
