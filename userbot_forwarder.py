@@ -92,6 +92,19 @@ async def handle_instagram_link(client: Client, message: Message):
             await message.delete()
             print("🗑️ Deleted original message")
 
+            # ارسال پیام Processing...⏳ به گروه
+            processing_msg = await client.send_message(
+                message.chat.id,
+                "Processing...⏳"
+            )
+            
+            # ذخیره وضعیت برای مراحل بعدی
+            upload_state[message.chat.id] = {
+                "step": "waiting",
+                "link": link,
+                "processing_msg_id": processing_msg.id
+            }
+
         except Exception as e:
             print("❌ Error sending to bot:", e)
 
@@ -130,6 +143,25 @@ async def handle_bot_response(client: Client, message: Message):
                                 "step": "waiting",
                                 "link": link,
                                 "caption": cleaned
+                            }
+
+                            # حذف پیام Processing...⏳ اگر وجود داشت
+                            old_msg_id = upload_state[group_id].get("processing_msg_id")
+                            if old_msg_id:
+                                await client.delete_messages(group_id, old_msg_id)
+                            
+                            # ارسال پیام مخصوص پست‌های حجیم
+                            cdn_notice = await client.send_message(
+                                group_id,
+                                "⏳ Large post detected. Processing via alternate CDN route..."
+                            )
+                            
+                            # ذخیره وضعیت جدید
+                            upload_state[group_id] = {
+                                "step": "waiting",
+                                "link": link,
+                                "caption": cleaned,
+                                "cdn_notice_id": cdn_notice.id
                             }
 
                             # مرحله ۵: ارسال لینک به @urluploadxbot
@@ -206,6 +238,14 @@ async def handle_upload_response(client: Client, message: Message):
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
 
+                cdn_notice_id = state.get("cdn_notice_id")
+                if cdn_notice_id:
+                    await client.delete_messages(group_id, cdn_notice_id)
+                
+                processing_msg_id = state.get("processing_msg_id")
+                if processing_msg_id:
+                    await client.delete_messages(group_id, processing_msg_id)
+
                 await client.send_video(
                     group_id,
                     video=message.video.file_id,
@@ -219,6 +259,17 @@ async def handle_upload_response(client: Client, message: Message):
         if message.photo or "۴ دقیقه" in message.text:
             print("⏭ Skipped non-video message from @urluploadxbot")
             return
+
+        for group_id, state in upload_state.items():
+            cdn_notice_id = state.get("cdn_notice_id")
+            if cdn_notice_id:
+                await client.delete_messages(group_id, cdn_notice_id)
+        
+            processing_msg_id = state.get("processing_msg_id")
+            if processing_msg_id:
+                await client.delete_messages(group_id, processing_msg_id)
+        
+            await client.send_message(group_id, "❌ Failed to process the post. Please try again.")
 
     except Exception as e:
         print("❌ Error handling upload response:", e)
