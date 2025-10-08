@@ -153,13 +153,20 @@ async def handle_bot_response(client: Client, message: Message):
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
 
-                if media_buffer:
-                    await client.send_media_group(group_id, media=media_buffer)
-                    print("📤 Sent media group")
+                MAX_MEDIA_PER_GROUP = 10
 
+                if media_buffer:
+                    # تقسیم آلبوم به دسته‌های 10‌تایی
+                    chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
+                
+                    for index, chunk in enumerate(chunks):
+                        await client.send_media_group(group_id, media=chunk)
+                        print(f"📤 Sent media group chunk {index + 1}/{len(chunks)}")
+                
+                    # ارسال کپشن نهایی بعد از آخرین chunk
                     await client.send_message(group_id, final_caption)
                     print("📥 Sent caption with link")
-
+                
                     media_buffer.clear()
                 else:
                     print("⚠️ No media found, caption skipped")
