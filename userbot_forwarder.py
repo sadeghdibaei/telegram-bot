@@ -148,10 +148,14 @@ async def handle_bot_response(client: Client, message: Message):
 # ---------------------------
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
-    await forward_message_and_buttons(client, message)
     try:
-        # مرحله انتخاب گزینه‌ی Default
-        if "rename" in message.text.lower() and message.reply_markup:
+        # فقط پیام‌هایی که واقعاً دکمه‌ی آپلود دارن رو تحلیل کن
+        if message.reply_markup and (
+            "rename" in message.text.lower() or
+            "how would you like to upload" in message.text.lower()
+        ):
+            await forward_message_and_buttons(client, message)
+
             clicked = False
             for row in message.reply_markup.inline_keyboard:
                 for i, btn in enumerate(row):
@@ -169,8 +173,8 @@ async def handle_upload_response(client: Client, message: Message):
                 print("⚠️ No 'Default' button found, skipping rename step")
             return
 
-        # مرحله دریافت ویدیو و ارسال همراه با کپشن
-        if message.video:
+        # دریافت ویدیو و ارسال همراه با کپشن
+        if message.video and upload_state:
             for group_id, state in upload_state.items():
                 link = state.get("link")
                 cleaned = state.get("caption", "")
@@ -184,12 +188,13 @@ async def handle_upload_response(client: Client, message: Message):
                     caption=final_caption
                 )
                 print("📥 Final video + caption sent")
+
             upload_state.clear()
             return
 
         # رد کردن پیام‌های غیرمفید
-        if message.photo or "۴ دقیقه" in message.text:
-            print("⏭ Skipped non-video message from @urluploadxbot")
+        if message.photo or "processing" in message.text.lower() or "۴ دقیقه" in message.text:
+            print("⏭ Skipped non-actionable message from @urluploadxbot")
             return
 
     except Exception as e:
