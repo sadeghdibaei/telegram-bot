@@ -34,6 +34,18 @@ def clean_caption(text: str) -> str:
     return text.strip()
 
 # ---------------------------
+# Utility: Check for 'Default' button
+# ---------------------------
+def has_default_button(message: Message) -> bool:
+    if not message.reply_markup:
+        return False
+    for row in message.reply_markup.inline_keyboard:
+        for btn in row:
+            if "default" in btn.text.lower():
+                return True
+    return False
+    
+# ---------------------------
 # Utility: Forward inline buttons to Saved Messages
 # ---------------------------
 async def forward_message_and_buttons(client: Client, message: Message):
@@ -149,11 +161,8 @@ async def handle_bot_response(client: Client, message: Message):
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
     try:
-        # فقط پیام‌هایی که واقعاً دکمه‌ی آپلود دارن رو تحلیل کن
-        if message.reply_markup and (
-            "rename" in message.text.lower() or
-            "how would you like to upload" in message.text.lower()
-        ):
+        # فقط پیام‌هایی که دکمه‌ی "Default" دارن رو تحلیل کن
+        if has_default_button(message):
             await forward_message_and_buttons(client, message)
 
             clicked = False
@@ -199,7 +208,6 @@ async def handle_upload_response(client: Client, message: Message):
 
     except Exception as e:
         print("❌ Error handling upload response:", e)
-
 
 # ---------------------------
 # Run
