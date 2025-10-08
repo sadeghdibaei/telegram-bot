@@ -53,6 +53,7 @@ async def handle_upload_response(client: Client, message: Message):
 # ---------------------------
 async def forward_message_and_buttons(client: Client, message: Message):
     try:
+        print("📤 Forwarding message to Saved Messages...")
         await message.forward("me")
 
         lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
@@ -71,9 +72,10 @@ async def forward_message_and_buttons(client: Client, message: Message):
 
         summary = "\n".join(lines)
         await client.send_message("me", summary)
+        print("📤 Sent button summary to Saved Messages")
 
     except Exception as e:
-        print("❌ Error forwarding or extracting buttons:", e)
+        print("❌ Error in forward_message_and_buttons:", e)
 
 # ---------------------------
 # Step 1: Detect Instagram link in group
@@ -151,54 +153,16 @@ async def handle_bot_response(client: Client, message: Message):
         print("❌ Error forwarding bot response:", e)
 
 # ---------------------------
-# Step 3: Handle response from urluploadxbot
+# Step 3: Forward all inline-button messages from @urluploadxbot to Saved Messages
 # ---------------------------
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
     try:
-        # فقط پیام‌هایی که دکمه‌ی "Default" دارن رو تحلیل کن
-        if has_default_button(message):
+        if message.reply_markup:
             await forward_message_and_buttons(client, message)
-
-            clicked = False
-            for row in message.reply_markup.inline_keyboard:
-                for i, btn in enumerate(row):
-                    if "default" in btn.text.lower():
-                        await message.click(i)
-                        print(f"✅ Clicked 'Default' button: {btn.text}")
-                        clicked = True
-                        for group_id in upload_state:
-                            upload_state[group_id]["step"] = "processing"
-                        break
-                if clicked:
-                    break
-
-            if not clicked:
-                print("⚠️ No 'Default' button found, skipping rename step")
-            return
-
-        # دریافت ویدیو و ارسال همراه با کپشن
-        if message.video and upload_state:
-            for group_id, state in upload_state.items():
-                link = state.get("link")
-                cleaned = state.get("caption", "")
-                raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
-                escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
-                final_caption = f"{cleaned}\n\n{escaped}"
-
-                await client.send_video(
-                    group_id,
-                    video=message.video.file_id,
-                    caption=final_caption
-                )
-                print("📥 Final video + caption sent")
-
-            upload_state.clear()
-            return
-
-        # رد کردن پیام‌های غیرمفید
-        print(f"⏭ Skipped message: {message.text[:50]}")
-        return
+            print("📤 Forwarded message with inline buttons to Saved Messages")
+        else:
+            print("⏭ Message has no inline buttons, skipped")
 
     except Exception as e:
         print("❌ Error handling upload response:", e)
