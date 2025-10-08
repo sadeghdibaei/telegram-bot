@@ -36,27 +36,37 @@ def clean_caption(text: str) -> str:
 # ---------------------------
 # Utility: Forward inline buttons to Saved Messages
 # ---------------------------
-async def forward_inline_buttons_to_me(client: Client, message: Message):
-    if not message.reply_markup:
-        return
+async def forward_message_and_buttons(client: Client, message: Message):
+    try:
+        # مرحله اول: فوروارد خود پیام
+        await message.forward("me")
+        print("📤 Forwarded message to Saved Messages")
 
-    lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
-    for row_index, row in enumerate(message.reply_markup.inline_keyboard):
-        for col_index, btn in enumerate(row):
-            label = btn.text
-            url = getattr(btn, "url", None)
-            callback = getattr(btn, "callback_data", None)
+        # مرحله دوم: استخراج دکمه‌ها
+        if not message.reply_markup:
+            await client.send_message("me", "⛔ پیام دکمه‌ی شیشه‌ای نداشت.")
+            return
 
-            line = f"▪️ [{row_index},{col_index}] '{label}'"
-            if url:
-                line += f"\n   🌐 URL: {url}"
-            if callback:
-                line += f"\n   📦 Callback: {callback}"
-            lines.append(line)
+        lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
+        for row_index, row in enumerate(message.reply_markup.inline_keyboard):
+            for col_index, btn in enumerate(row):
+                label = btn.text
+                url = getattr(btn, "url", None)
+                callback = getattr(btn, "callback_data", None)
 
-    summary = "\n".join(lines)
-    await client.send_message("me", summary)
-    print("📤 Sent inline button summary to Saved Messages")
+                line = f"▪️ [{row_index},{col_index}] '{label}'"
+                if url:
+                    line += f"\n   🌐 URL: {url}"
+                if callback:
+                    line += f"\n   📦 Callback: {callback}"
+                lines.append(line)
+
+        summary = "\n".join(lines)
+        await client.send_message("me", summary)
+        print("📤 Sent inline button summary to Saved Messages")
+
+    except Exception as e:
+        print("❌ Error forwarding or extracting buttons:", e)
 
 # ---------------------------
 # Step 1: Detect Instagram link in group
