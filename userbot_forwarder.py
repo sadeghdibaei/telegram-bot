@@ -148,7 +148,7 @@ async def handle_bot_response(client: Client, message: Message):
 # ---------------------------
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
-    await forward_inline_buttons_to_me(client, message)
+    await forward_message_and_buttons(client, message)
     try:
         # مرحله انتخاب گزینه‌ی Default
         if "rename" in message.text.lower() and message.reply_markup:
