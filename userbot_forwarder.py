@@ -84,15 +84,15 @@ async def handle_bot_response(client: Client, message: Message):
 async def test_button(client: Client, message: Message):
     try:
         group_id = TARGET_GROUP_ID
-        link = "https://www.instagram.com/reel/DODEbrsiJQb/?igsh=MWFiYmIzY2RwYnV0ag=="
+        link = "https://example.com"
 
         keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("مشاهده در اینستاگرام", url=link)]]
+            [[InlineKeyboardButton("بازدید از سایت تستی", url=link)]]
         )
 
         await client.send_message(
             group_id,
-            "⬇️ تست دکمه شیشه‌ای",
+            "⬇️ تست دکمه‌ی غیر اینستاگرامی",
             reply_markup=keyboard
         )
 
