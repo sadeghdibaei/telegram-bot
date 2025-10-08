@@ -2,6 +2,7 @@ import os
 import re
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
+from cdn_handler import handle_cdn_link
 
 # ---------------------------
 # Config & Session
@@ -38,39 +39,11 @@ async def test_me(client: Client, message: Message):
     await client.send_message("me", "✅ تست ارسال به Saved Messages")
 
 # ---------------------------
-# Step 3: Forward and analyze all private messages from urluploadxbot
+# Step 3: Delegate all messages from @urluploadxbot to cdn_handler
 # ---------------------------
-@app.on_message(filters.private)
+@app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
-    try:
-        if message.from_user and message.from_user.username == "urluploadxbot":
-            await message.forward("me")
-            print("📤 Message forwarded to Saved Messages")
-
-            if message.reply_markup:
-                lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
-                for row_index, row in enumerate(message.reply_markup.inline_keyboard):
-                    for col_index, btn in enumerate(row):
-                        label = btn.text
-                        url = getattr(btn, "url", None)
-                        callback = getattr(btn, "callback_data", None)
-
-                        line = f"▪️ [{row_index},{col_index}] '{label}'"
-                        if url:
-                            line += f"\n   🌐 URL: {url}"
-                        if callback:
-                            line += f"\n   📦 Callback: {callback}"
-                        lines.append(line)
-
-                summary = "\n".join(lines)
-                await client.send_message("me", summary)
-                print("📤 Button summary sent")
-            else:
-                await client.send_message("me", "⛔ این پیام دکمه نداشت.")
-                print("⛔ No inline buttons found")
-
-    except Exception as e:
-        print("❌ Error handling upload response:", e)
+    await handle_cdn_link(client, message)
 
 # ---------------------------
 # Utility: Forward any inline-button message to Saved Messages
