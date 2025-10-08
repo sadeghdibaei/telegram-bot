@@ -51,7 +51,6 @@ async def handle_instagram_link(client: Client, message: Message):
 async def handle_bot_response(client: Client, message: Message):
     try:
         for group_id, link in last_instagram_link.items():
-            # بافر مدیا
             if message.photo:
                 media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
                 print("📥 Buffered photo")
@@ -60,30 +59,26 @@ async def handle_bot_response(client: Client, message: Message):
                 media_buffer.append(InputMediaVideo(media=message.video.file_id))
                 print("📥 Buffered video")
 
-            # پیام متنی = پایان آلبوم
             elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
                 keyboard = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("O P E N P O S T ⎋", url=link)]]
+                    [[InlineKeyboardButton("مشاهده در اینستاگرام", url=link)]]
                 )
 
-                # ارسال آلبوم
                 if media_buffer:
                     await client.send_media_group(group_id, media=media_buffer)
                     print("📤 Sent media group")
                     media_buffer.clear()
 
-                # ارسال کپشن با دکمه
-                if cleaned:
-                    await client.send_message(
-                        group_id,
-                        cleaned,
-                        reply_markup=keyboard
-                    )
-                    print("📥 Sent caption with button")
+                await client.send_message(
+                    group_id,
+                    cleaned if cleaned else "⬇️",
+                    reply_markup=keyboard
+                )
+                print("📥 Sent caption with button")
 
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
 
-print("🧪 Userbot test relay with album + button is running...")
+print("🧪 Userbot relay with album + caption + button is running...")
 app.run()
