@@ -33,6 +33,10 @@ def clean_caption(text: str) -> str:
         text = text.replace(phrase, "")
     return text.strip()
 
+@app.on_message(filters.command("testme"))
+async def test_me(client: Client, message: Message):
+    await client.send_message("me", "✅ تست ارسال به Saved Messages")
+
 # ---------------------------
 # Step 3: Forward all inline-button messages from @urluploadxbot to Saved Messages
 # ---------------------------
