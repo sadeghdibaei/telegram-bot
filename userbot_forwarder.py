@@ -1,7 +1,7 @@
 import os
 import re
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
@@ -45,39 +45,50 @@ async def handle_bot_response(client: Client, message: Message):
         for group_id, link in last_instagram_link.items():
             raw_caption = message.caption or message.text or ""
             cleaned = clean_caption(raw_caption)
-            link_tag = f'<a href="{link}">O P E N P O S T ⎋</a>'
-            final_caption = f"{cleaned}\n\n{link_tag}"
+
+            keyboard = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("O P E N P O S T ⎋", url=link)]]
+            )
 
             if message.photo:
                 await client.send_photo(
                     group_id,
                     photo=message.photo.file_id,
-                    caption=final_caption,
-                    parse_mode="HTML"
+                    caption=cleaned,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
                 )
-                print("📥 Sent photo with cleaned caption")
 
             elif message.document:
                 await client.send_document(
                     group_id,
                     document=message.document.file_id,
-                    caption=final_caption,
-                    parse_mode="HTML"
+                    caption=cleaned,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
                 )
-                print("📥 Sent document with cleaned caption")
 
             elif message.video:
                 await client.send_video(
                     group_id,
                     video=message.video.file_id,
-                    caption=final_caption,
-                    parse_mode="HTML"
+                    caption=cleaned,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
                 )
-                print("📥 Sent video with cleaned caption")
 
             elif message.text:
-                await client.send_message(group_id, final_caption, parse_mode="HTML")
-                print("📥 Sent text with cleaned caption")
+                await client.send_message(
+                    group_id,
+                    cleaned,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+
+            else:
+                await client.copy_message(group_id, message.chat.id, message.id)
+
+            print("📥 Forwarded response with button")
 
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
