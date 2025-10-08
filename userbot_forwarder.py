@@ -32,7 +32,7 @@ async def handle_bot_response(client: Client, message: Message):
         # اینجا فرض می‌گیریم فقط یه گروه فعاله و پیام رو به اون می‌فرستیم
         # اگه چند گروه داری، باید یه سیستم نگهداری context اضافه کنیم
 
-        TARGET_GROUP_ID = -1001234567890  # 🔧 جایگزین کن با chat_id گروه تستت
+        TARGET_GROUP_ID = -1003183210016  # 🔧 جایگزین کن با chat_id گروه تستت
 
         if message.media:
             await client.copy_message(TARGET_GROUP_ID, message.chat.id, message.id)
