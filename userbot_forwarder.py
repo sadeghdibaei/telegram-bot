@@ -59,7 +59,7 @@ async def handle_bot_response(client: Client, message: Message):
 
             elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
-                final_caption = f'{cleaned}\n\n<a href="{link}">O P E N P O S T ⎋</a>'
+                final_caption = f"{cleaned}\n\n`<a href=\"{link}\">O P E N P O S T ⎋</a>`"
 
                 if media_buffer:
                     await client.send_media_group(group_id, media=media_buffer)
