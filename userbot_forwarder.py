@@ -59,7 +59,7 @@ async def handle_bot_response(client: Client, message: Message):
 
             elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
-                final_caption = f"{cleaned}\n\nInsta Merge Bot"
+                final_caption = f"{cleaned}\n\n{link}"
 
                 if media_buffer:
                     await client.send_media_group(group_id, media=media_buffer)
@@ -70,10 +70,10 @@ async def handle_bot_response(client: Client, message: Message):
                     group_id,
                     final_caption
                 )
-                print("📥 Sent caption with final line")
+                print("📥 Sent caption with link")
 
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
 
-print("🧪 Userbot relay with album + caption + final line is running...")
+print("🧪 Userbot relay with album + caption + link is running...")
 app.run()
