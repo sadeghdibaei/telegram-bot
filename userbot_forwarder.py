@@ -203,6 +203,21 @@ async def handle_bot_response(client: Client, message: Message):
                 else:
                     print("⚠️ No media found, caption skipped")
 
+            # مرحله آخر: اگر نه دکمه بود، نه مدیا، فقط کپشن → پردازش شکست خورده
+            else:
+                # حذف پیام موقت
+                cdn_notice_id = upload_state.get(group_id, {}).get("cdn_notice_id")
+                if cdn_notice_id:
+                    await client.delete_messages(group_id, cdn_notice_id)
+            
+                processing_msg_id = upload_state.get(group_id, {}).get("processing_msg_id")
+                if processing_msg_id:
+                    await client.delete_messages(group_id, processing_msg_id)
+            
+                # ارسال پیام خطا
+                await client.send_message(group_id, "❌ Failed to process the post. No media found.")
+                upload_state.pop(group_id, None)
+
     except Exception as e:
         print("❌ Error handling iDownloadersBot response:", e)
 
