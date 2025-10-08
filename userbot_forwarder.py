@@ -1,23 +1,29 @@
 import os
 import re
 from pyrogram import Client, filters
-from pyrogram.types import (
-    Message,
-    InputMediaPhoto,
-    InputMediaVideo
-)
+from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 
+# ---------------------------
+# Config & Session
+# ---------------------------
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
 TARGET_GROUP_ID = int(os.environ["TARGET_GROUP_ID"])
 
-app = Client("userbot_test", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
+app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
+# ---------------------------
+# State & Buffers
+# ---------------------------
 INSTAGRAM_REGEX = re.compile(r"(https?://)?(www\.)?instagram\.com/[^\s]+")
-last_instagram_link = {}
-media_buffer = []
+last_instagram_link = {}  # chat_id → link
+media_buffer = []         # list of InputMediaPhoto/Video
+upload_state = {}         # group_id → {"step": "waiting"|"processing"}
 
+# ---------------------------
+# Caption Cleaning
+# ---------------------------
 def clean_caption(text: str) -> str:
     blacklist = [
         "🤖 Downloaded with @iDownloadersBot",
@@ -27,6 +33,9 @@ def clean_caption(text: str) -> str:
         text = text.replace(phrase, "")
     return text.strip()
 
+# ---------------------------
+# Step 1: Detect Instagram link in group
+# ---------------------------
 @app.on_message(filters.group & filters.text)
 async def handle_instagram_link(client: Client, message: Message):
     match = INSTAGRAM_REGEX.search(message.text)
@@ -45,10 +54,25 @@ async def handle_instagram_link(client: Client, message: Message):
         except Exception as e:
             print("❌ Error sending to bot:", e)
 
+# ---------------------------
+# Step 2: Handle response from iDownloadersBot
+# ---------------------------
 @app.on_message(filters.private & filters.user("iDownloadersBot"))
 async def handle_bot_response(client: Client, message: Message):
     try:
         for group_id, link in last_instagram_link.items():
+            # Case: oversized file → only button with CDN link
+            if message.reply_markup and not (message.photo or message.video):
+                for row in message.reply_markup.inline_keyboard:
+                    for btn in row:
+                        if btn.url and "cdninstagram.com" in btn.url:
+                            cdn_link = btn.url
+                            upload_state[group_id] = {"step": "waiting"}
+                            await client.send_message("urluploadxbot", cdn_link)
+                            print("📤 Sent CDN link to @urluploadxbot")
+                            return
+
+            # Case: media content
             if message.photo:
                 media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
                 print("📥 Buffered photo")
@@ -63,20 +87,53 @@ async def handle_bot_response(client: Client, message: Message):
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
 
-
                 if media_buffer:
                     await client.send_media_group(group_id, media=media_buffer)
                     print("📤 Sent media group")
                     media_buffer.clear()
 
-                await client.send_message(
-                    group_id,
-                    final_caption
-                )
+                await client.send_message(group_id, final_caption)
                 print("📥 Sent caption with link")
 
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
 
-print("🧪 Userbot relay with album + caption + link is running...")
+# ---------------------------
+# Step 3: Handle response from urluploadxbot
+# ---------------------------
+@app.on_message(filters.private & filters.user("urluploadxbot"))
+async def handle_upload_response(client: Client, message: Message):
+    try:
+        # Step: select default filename
+        if "rename" in message.text.lower():
+            await message.click(1)
+            print("✅ Selected default filename")
+            for group_id in upload_state:
+                upload_state[group_id]["step"] = "processing"
+            return
+
+        # Step: receive final video
+        if message.video:
+            for group_id in upload_state:
+                await client.send_video(
+                    group_id,
+                    video=message.video.file_id,
+                    caption="⬇️ ویدیو نهایی دریافت شد"
+                )
+                print("📥 Final video forwarded")
+            upload_state.clear()
+            return
+
+        # Skip irrelevant messages
+        if message.photo or "۴ دقیقه" in message.text:
+            print("⏭ Skipped non-video message from @urluploadxbot")
+            return
+
+    except Exception as e:
+        print("❌ Error handling upload response:", e)
+
+# ---------------------------
+# Run
+# ---------------------------
+print("🚀 Userbot is running with full CDN fallback logic...")
 app.run()
