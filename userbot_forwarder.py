@@ -1,7 +1,7 @@
 import os
 import re
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo, InlineKeyboardMarkup, InlineKeyboardButton
 
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
@@ -12,6 +12,7 @@ app = Client("userbot_test", api_id=API_ID, api_hash=API_HASH, session_string=SE
 
 INSTAGRAM_REGEX = re.compile(r"(https?://)?(www\.)?instagram\.com/[^\s]+")
 last_instagram_link = {}
+media_buffer = []
 
 def clean_caption(text: str) -> str:
     blacklist = [
@@ -29,6 +30,7 @@ async def handle_instagram_link(client: Client, message: Message):
         try:
             link = match.group(0)
             last_instagram_link[message.chat.id] = link
+            media_buffer.clear()
 
             await client.send_message("iDownloadersBot", link)
             print("📤 Sent link to iDownloadersBot")
@@ -43,55 +45,40 @@ async def handle_instagram_link(client: Client, message: Message):
 async def handle_bot_response(client: Client, message: Message):
     try:
         for group_id, link in last_instagram_link.items():
-            raw_caption = message.caption or message.text or ""
-            cleaned = clean_caption(raw_caption)
-
-            keyboard = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("O P E N P O S T ⎋", url=link)]]
-            )
-
+            # اگر پیام مدیاست، بافرش کن
             if message.photo:
-                await client.send_photo(
-                    group_id,
-                    photo=message.photo.file_id,
-                    caption=cleaned,
-                    parse_mode="HTML",
-                    reply_markup=keyboard
-                )
-
-            elif message.document:
-                await client.send_document(
-                    group_id,
-                    document=message.document.file_id,
-                    caption=cleaned,
-                    parse_mode="HTML",
-                    reply_markup=keyboard
-                )
+                media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
+                print("📥 Buffered photo")
 
             elif message.video:
-                await client.send_video(
-                    group_id,
-                    video=message.video.file_id,
-                    caption=cleaned,
-                    parse_mode="HTML",
-                    reply_markup=keyboard
+                media_buffer.append(InputMediaVideo(media=message.video.file_id))
+                print("📥 Buffered video")
+
+            # اگر پیام متنیه، یعنی آلبوم تموم شده
+            elif message.text or message.caption:
+                cleaned = clean_caption(message.caption or message.text or "")
+                keyboard = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("O P E N P O S T ⎋", url=link)]]
                 )
 
-            elif message.text:
-                await client.send_message(
-                    group_id,
-                    cleaned,
-                    parse_mode="HTML",
-                    reply_markup=keyboard
-                )
+                # اول آلبوم رو بفرست
+                if media_buffer:
+                    await client.send_media_group(group_id, media=media_buffer)
+                    print("📤 Sent media group")
+                    media_buffer.clear()
 
-            else:
-                await client.copy_message(group_id, message.chat.id, message.id)
-
-            print("📥 Forwarded response with button")
+                # بعدش کپشن رو جداگانه با دکمه بفرست
+                if cleaned:
+                    await client.send_message(
+                        group_id,
+                        cleaned,
+                        parse_mode="HTML",
+                        reply_markup=keyboard
+                    )
+                    print("📥 Sent caption with button")
 
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
 
-print("🧪 Userbot test relay is running...")
+print("🧪 Userbot test relay with album + button is running...")
 app.run()
