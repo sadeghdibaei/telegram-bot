@@ -123,30 +123,48 @@ async def handle_instagram_link(client: Client, message: Message):
             print("❌ Error sending to bot:", e)
 
 # ---------------------------
-# Step 2: Handle response from iDownloadersBot
+# Step 2: Handle response from iDownloadersBot and extract CDN link
 # ---------------------------
 @app.on_message(filters.private & filters.user("iDownloadersBot"))
 async def handle_bot_response(client: Client, message: Message):
     try:
         for group_id, link in last_instagram_link.items():
-            # Case: oversized file → only button with CDN link
-            if message.reply_markup and not (message.photo or message.video):
-                for row in message.reply_markup.inline_keyboard:
-                    for btn in row:
-                        if btn.url and "cdninstagram.com" in btn.url:
-                            cdn_link = btn.url
+
+            # مرحله ۱: بررسی وجود دکمه‌ها
+            if message.reply_markup:
+                print("🔍 reply_markup detected, analyzing buttons...")
+
+                for row_index, row in enumerate(message.reply_markup.inline_keyboard):
+                    for col_index, btn in enumerate(row):
+                        label = btn.text
+                        url = getattr(btn, "url", None)
+                        callback = getattr(btn, "callback_data", None)
+
+                        print(f"🔘 Button [{row_index},{col_index}]: '{label}'")
+                        print(f"   🌐 URL: {url}")
+                        print(f"   📦 Callback: {callback}")
+
+                        # مرحله ۲: استخراج لینک CDN از دکمه
+                        if url and "cdn" in url:
+                            cdn_link = url
+                            print(f"✅ Found CDN link: {cdn_link}")
+
+                            # مرحله ۳: پاک‌سازی کپشن
                             cleaned = clean_caption(message.text or message.caption or "")
+
+                            # مرحله ۴: ذخیره وضعیت برای مرحله بعدی
                             upload_state[group_id] = {
                                 "step": "waiting",
                                 "link": link,
                                 "caption": cleaned
                             }
 
+                            # مرحله ۵: ارسال لینک به @urluploadxbot
                             await client.send_message("urluploadxbot", cdn_link)
-                            print("📤 Sent CDN link to @urluploadxbot")
+                            print(f"📤 Sent CDN link to @urluploadxbot")
                             return
 
-            # Case: media content
+            # مرحله ۶: اگر پیام شامل مدیا بود، ذخیره در بافر
             if message.photo:
                 media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
                 print("📥 Buffered photo")
@@ -155,6 +173,7 @@ async def handle_bot_response(client: Client, message: Message):
                 media_buffer.append(InputMediaVideo(media=message.video.file_id))
                 print("📥 Buffered video")
 
+            # مرحله ۷: اگر کپشن داشت، ارسال همراه با مدیا
             elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
                 raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
@@ -172,9 +191,8 @@ async def handle_bot_response(client: Client, message: Message):
                 else:
                     print("⚠️ No media found, caption skipped")
 
-
     except Exception as e:
-        print("❌ Error forwarding bot response:", e)
+        print("❌ Error handling iDownloadersBot response:", e)
 
 # ---------------------------
 # Step 3: Forward all inline-button messages from @urluploadxbot to Saved Messages
