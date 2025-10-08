@@ -34,42 +34,26 @@ def clean_caption(text: str) -> str:
     return text.strip()
 
 # ---------------------------
-# Utility: Check for 'Default' button
+# Step 3: Forward all inline-button messages from @urluploadxbot to Saved Messages
 # ---------------------------
-def has_default_button(message: Message) -> bool:
-    if not message.reply_markup:
-        return False
-    for row in message.reply_markup.inline_keyboard:
-        for btn in row:
-            if "default" in btn.text.lower():
-                return True
-    return False
+@app.on_message(filters.private & filters.user("urluploadxbot"))
+async def handle_upload_response(client: Client, message: Message):
+    try:
+        if message.reply_markup:
+            await forward_message_and_buttons(client, message)
+            print("📤 Forwarded message with inline buttons to Saved Messages")
+        else:
+            print("⏭ Message has no inline buttons, skipped")
+
+    except Exception as e:
+        print("❌ Error handling upload response:", e)
 
 # ---------------------------
-# Utility: Detect presence of 'Default' button in inline keyboard
-# ---------------------------
-def has_default_button(message: Message) -> bool:
-    if not message.reply_markup:
-        return False
-    for row in message.reply_markup.inline_keyboard:
-        for btn in row:
-            if "default" in btn.text.lower():
-                return True
-    return False
-    
-# ---------------------------
-# Utility: Forward inline buttons to Saved Messages
+# Utility: Forward any inline-button message to Saved Messages
 # ---------------------------
 async def forward_message_and_buttons(client: Client, message: Message):
     try:
-        # مرحله اول: فوروارد خود پیام
         await message.forward("me")
-        print("📤 Forwarded message to Saved Messages")
-
-        # مرحله دوم: استخراج دکمه‌ها
-        if not message.reply_markup:
-            await client.send_message("me", "⛔ پیام دکمه‌ی شیشه‌ای نداشت.")
-            return
 
         lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
         for row_index, row in enumerate(message.reply_markup.inline_keyboard):
@@ -87,7 +71,6 @@ async def forward_message_and_buttons(client: Client, message: Message):
 
         summary = "\n".join(lines)
         await client.send_message("me", summary)
-        print("📤 Sent inline button summary to Saved Messages")
 
     except Exception as e:
         print("❌ Error forwarding or extracting buttons:", e)
