@@ -37,7 +37,6 @@ def clean_caption(text: str) -> str:
 # Utility: Forward inline buttons to Saved Messages
 # ---------------------------
 async def forward_inline_buttons_to_me(client: Client, message: Message):
-    await forward_inline_buttons_to_me(client, message)
     if not message.reply_markup:
         return
 
