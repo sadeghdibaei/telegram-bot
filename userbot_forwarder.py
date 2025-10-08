@@ -67,7 +67,13 @@ async def handle_bot_response(client: Client, message: Message):
                     for btn in row:
                         if btn.url and "cdninstagram.com" in btn.url:
                             cdn_link = btn.url
-                            upload_state[group_id] = {"step": "waiting"}
+                            cleaned = clean_caption(message.text or message.caption or "")
+                            upload_state[group_id] = {
+                                "step": "waiting",
+                                "link": link,
+                                "caption": cleaned
+                            }
+
                             await client.send_message("urluploadxbot", cdn_link)
                             print("📤 Sent CDN link to @urluploadxbot")
                             return
@@ -90,10 +96,14 @@ async def handle_bot_response(client: Client, message: Message):
                 if media_buffer:
                     await client.send_media_group(group_id, media=media_buffer)
                     print("📤 Sent media group")
-                    media_buffer.clear()
 
-                await client.send_message(group_id, final_caption)
-                print("📥 Sent caption with link")
+                    await client.send_message(group_id, final_caption)
+                    print("📥 Sent caption with link")
+
+                    media_buffer.clear()
+                else:
+                    print("⚠️ No media found, caption skipped")
+
 
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
@@ -104,33 +114,51 @@ async def handle_bot_response(client: Client, message: Message):
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
     try:
-        # Step: select default filename
-        if "rename" in message.text.lower():
-            await message.click(1)
-            print("✅ Selected default filename")
-            for group_id in upload_state:
-                upload_state[group_id]["step"] = "processing"
+        # مرحله انتخاب گزینه‌ی Default
+        if "rename" in message.text.lower() and message.reply_markup:
+            clicked = False
+            for row in message.reply_markup.inline_keyboard:
+                for i, btn in enumerate(row):
+                    if "default" in btn.text.lower():
+                        await message.click(i)
+                        print(f"✅ Clicked 'Default' button: {btn.text}")
+                        clicked = True
+                        for group_id in upload_state:
+                            upload_state[group_id]["step"] = "processing"
+                        break
+                if clicked:
+                    break
+
+            if not clicked:
+                print("⚠️ No 'Default' button found, skipping rename step")
             return
 
-        # Step: receive final video
+        # مرحله دریافت ویدیو و ارسال همراه با کپشن
         if message.video:
-            for group_id in upload_state:
+            for group_id, state in upload_state.items():
+                link = state.get("link")
+                cleaned = state.get("caption", "")
+                raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+                escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+                final_caption = f"{cleaned}\n\n{escaped}"
+
                 await client.send_video(
                     group_id,
                     video=message.video.file_id,
-                    caption="⬇️ ویدیو نهایی دریافت شد"
+                    caption=final_caption
                 )
-                print("📥 Final video forwarded")
+                print("📥 Final video + caption sent")
             upload_state.clear()
             return
 
-        # Skip irrelevant messages
+        # رد کردن پیام‌های غیرمفید
         if message.photo or "۴ دقیقه" in message.text:
             print("⏭ Skipped non-video message from @urluploadxbot")
             return
 
     except Exception as e:
         print("❌ Error handling upload response:", e)
+
 
 # ---------------------------
 # Run
