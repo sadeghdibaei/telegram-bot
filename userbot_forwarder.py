@@ -5,6 +5,7 @@ from pyrogram.types import Message
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
+TARGET_GROUP_ID = int(os.environ["TARGET_GROUP_ID"])
 
 app = Client("userbot_test", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
@@ -31,8 +32,6 @@ async def handle_bot_response(client: Client, message: Message):
         # ارسال پاسخ بات به آخرین گروهی که لینک ازش اومده
         # اینجا فرض می‌گیریم فقط یه گروه فعاله و پیام رو به اون می‌فرستیم
         # اگه چند گروه داری، باید یه سیستم نگهداری context اضافه کنیم
-
-        TARGET_GROUP_ID = -1003183210016  # 🔧 جایگزین کن با chat_id گروه تستت
 
         if message.media:
             await client.copy_message(TARGET_GROUP_ID, message.chat.id, message.id)
