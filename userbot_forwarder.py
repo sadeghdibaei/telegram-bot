@@ -83,16 +83,17 @@ async def handle_bot_response(client: Client, message: Message):
 @app.on_message(filters.private & filters.command("testbutton"))
 async def test_button(client: Client, message: Message):
     try:
-        group_id = TARGET_GROUP_ID
-        link = "https://example.com"
+        # آی‌دی گروه رو مستقیم بذار—not از message.chat.id
+        group_id = -1003183210016  # همین آی‌دی که گفتی معتبره
 
+        link = "https://www.instagram.com/reel/DODEbrsiJQb/?igsh=MWFiYmIzY2RwYnV0ag=="
         keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("بازدید از سایت تستی", url=link)]]
+            [[InlineKeyboardButton("مشاهده در اینستاگرام", url=link)]]
         )
 
         await client.send_message(
             group_id,
-            "⬇️ تست دکمه‌ی غیر اینستاگرامی",
+            "⬇️ تست دکمه شیشه‌ای",
             reply_markup=keyboard
         )
 
