@@ -48,20 +48,20 @@ async def handle_cdn_link(client: Client, message: Message):
 
     # مرحله ۳: دریافت ویدیو
     if message.video and message.chat.id in upload_state:
-    chat_id = message.chat.id
-    print("📥 Final video received from @urluploadxbot")
-
-    # حذف پیام اطلاع‌رسانی موقت
-    cdn_notice_id = upload_state[chat_id].get("cdn_notice_id")
-    if cdn_notice_id:
-        await client.delete_messages(chat_id, cdn_notice_id)
-
-    processing_msg_id = upload_state[chat_id].get("processing_msg_id")
-    if processing_msg_id:
-        await client.delete_messages(chat_id, processing_msg_id)
-
-    upload_state.pop(chat_id, None)
-    return message.video.file_id
+        chat_id = message.chat.id
+        print("📥 Final video received from @urluploadxbot")
+    
+        # حذف پیام اطلاع‌رسانی موقت
+        cdn_notice_id = upload_state[chat_id].get("cdn_notice_id")
+        if cdn_notice_id:
+            await client.delete_messages(chat_id, cdn_notice_id)
+    
+        processing_msg_id = upload_state[chat_id].get("processing_msg_id")
+        if processing_msg_id:
+            await client.delete_messages(chat_id, processing_msg_id)
+    
+        upload_state.pop(chat_id, None)
+        return message.video.file_id
 
     # مرحله ۴: رد کردن پیام‌های غیرمفید
     if message.photo or "۴ دقیقه" in message.text:
