@@ -4,9 +4,7 @@ from pyrogram import Client, filters
 from pyrogram.types import (
     Message,
     InputMediaPhoto,
-    InputMediaVideo,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton
+    InputMediaVideo
 )
 
 API_ID = int(os.environ["API_ID"])
@@ -61,9 +59,7 @@ async def handle_bot_response(client: Client, message: Message):
 
             elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
-                keyboard = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("مشاهده در اینستاگرام", url=link)]]
-                )
+                final_caption = f"{cleaned}\n\nInsta Merge Bot"
 
                 if media_buffer:
                     await client.send_media_group(group_id, media=media_buffer)
@@ -72,14 +68,12 @@ async def handle_bot_response(client: Client, message: Message):
 
                 await client.send_message(
                     group_id,
-                    cleaned if cleaned else "⬇️",
-                    reply_markup=keyboard
+                    final_caption
                 )
-                print("📥 Sent caption with button")
+                print("📥 Sent caption with final line")
 
     except Exception as e:
         print("❌ Error forwarding bot response:", e)
 
-
-print("🧪 Userbot relay with album + caption + button is running...")
+print("🧪 Userbot relay with album + caption + final line is running...")
 app.run()
