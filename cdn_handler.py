@@ -11,29 +11,29 @@ async def handle_cdn_link(client: Client, message: Message):
         for row in message.reply_markup.inline_keyboard:
             for btn in row:
                 if btn.url and "cdninstagram.com" in btn.url:
-                cdn_link = btn.url
-                chat_id = message.chat.id
-            
-                # حذف پیام قبلی Processing...⏳ اگر وجود داشت
-                old_msg_id = upload_state.get(chat_id, {}).get("processing_msg_id")
-                if old_msg_id:
-                    await client.delete_messages(chat_id, old_msg_id)
-            
-                # ارسال پیام مخصوص پست‌های حجیم
-                cdn_notice = await client.send_message(
-                    chat_id,
-                    "⏳ Large post detected. Processing via alternate CDN route..."
-                )
-            
-                # ذخیره وضعیت
-                upload_state[chat_id] = {
-                    "step": "waiting",
-                    "cdn_notice_id": cdn_notice.id
-                }
-            
-                await client.send_message("urluploadxbot", cdn_link)
-                print("📤 Sent CDN link to @urluploadxbot")
-                return
+                    cdn_link = btn.url
+                    chat_id = message.chat.id
+                
+                    # حذف پیام قبلی Processing...⏳ اگر وجود داشت
+                    old_msg_id = upload_state.get(chat_id, {}).get("processing_msg_id")
+                    if old_msg_id:
+                        await client.delete_messages(chat_id, old_msg_id)
+                
+                    # ارسال پیام مخصوص پست‌های حجیم
+                    cdn_notice = await client.send_message(
+                        chat_id,
+                        "⏳ Large post detected. Processing via alternate CDN route..."
+                    )
+                
+                    # ذخیره وضعیت
+                    upload_state[chat_id] = {
+                        "step": "waiting",
+                        "cdn_notice_id": cdn_notice.id
+                    }
+                
+                    await client.send_message("urluploadxbot", cdn_link)
+                    print("📤 Sent CDN link to @urluploadxbot")
+                    return
 
     # مرحله ۲: انتخاب گزینه‌ی دیفالت
     if "rename" in message.text.lower() and message.reply_markup:
