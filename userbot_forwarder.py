@@ -38,19 +38,48 @@ async def test_me(client: Client, message: Message):
     await client.send_message("me", "✅ تست ارسال به Saved Messages")
 
 # ---------------------------
-# Step 3: Forward all inline-button messages from @urluploadxbot to Saved Messages
+# Step 3: Analyze all messages from @urluploadxbot and forward to Saved Messages
 # ---------------------------
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
     try:
-        if message.reply_markup:
-            await forward_message_and_buttons(client, message)
-            print("📤 Forwarded message with inline buttons to Saved Messages")
-        else:
-            print("⏭ Message has no inline buttons, skipped")
+        # مرحله اول: فوروارد خود پیام
+        await message.forward("me")
+        print("📤 Message forwarded to Saved Messages")
+
+        # مرحله دوم: بررسی دکمه‌ها
+        if not message.reply_markup:
+            await client.send_message("me", "⛔ این پیام دکمه نداشت.")
+            print("⛔ No inline buttons found")
+            return
+
+        keyboard = message.reply_markup.inline_keyboard
+        if not keyboard:
+            await client.send_message("me", "⛔ reply_markup وجود داشت ولی دکمه‌ای نبود.")
+            print("⛔ reply_markup exists but inline_keyboard is empty")
+            return
+
+        lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
+        for row_index, row in enumerate(keyboard):
+            for col_index, btn in enumerate(row):
+                label = btn.text
+                url = getattr(btn, "url", None)
+                callback = getattr(btn, "callback_data", None)
+
+                line = f"▪️ [{row_index},{col_index}] '{label}'"
+                if url:
+                    line += f"\n   🌐 URL: {url}"
+                if callback:
+                    line += f"\n   📦 Callback: {callback}"
+                lines.append(line)
+
+        summary = "\n".join(lines)
+        await client.send_message("me", summary)
+        print("📤 Button summary sent to Saved Messages")
 
     except Exception as e:
         print("❌ Error handling upload response:", e)
+
 
 # ---------------------------
 # Utility: Forward any inline-button message to Saved Messages
