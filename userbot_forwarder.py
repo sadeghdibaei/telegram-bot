@@ -1,3 +1,4 @@
+
 import os
 import re
 from pyrogram import Client, filters
@@ -153,38 +154,23 @@ async def handle_bot_response(client: Client, message: Message):
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
 
+                MAX_MEDIA_PER_GROUP = 10
+
                 if media_buffer:
-                    MAX_MEDIA_PER_GROUP = 10
+                    # تقسیم آلبوم به دسته‌های 10‌تایی
                     chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
                 
                     for index, chunk in enumerate(chunks):
                         await client.send_media_group(group_id, media=chunk)
                         print(f"📤 Sent media group chunk {index + 1}/{len(chunks)}")
                 
-                    # 📝 Try to get caption from upload_state
-                    cleaned = upload_state[group_id].get("caption", "")
-                    link = upload_state[group_id].get("link", "")
-                
-                    # ⏳ Wait briefly if caption is missing
-                    if not cleaned:
-                        await asyncio.sleep(2)
-                        cleaned = upload_state[group_id].get("caption", "") or ""
-                
-                    # 🔗 Always include hyperlink
-                    raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>' if link else ""
-                    escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
-                
-                    # 🧾 Final caption: either full or just link
-                    final_caption = f"{cleaned}\n\n{escaped}".strip()
-                
-                    # 📤 Send caption message (even if it's just the link)
-                    if final_caption:
-                        await client.send_message(group_id, final_caption)
-                        print("📥 Sent final caption (with or without text)")
+                    # ارسال کپشن نهایی بعد از آخرین chunk
+                    await client.send_message(group_id, final_caption)
+                    print("📥 Sent caption with link")
                 
                     media_buffer.clear()
-                    upload_state.pop(group_id, None)
-                    return
+                else:
+                    print("⚠️ No media found, caption skipped")
 
     except Exception as e:
         print("❌ Error handling iDownloadersBot response:", e)
