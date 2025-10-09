@@ -8,7 +8,10 @@ from config import INSTAGRAM_REGEX, IDOWNLOADER_BOT, MAX_MEDIA_PER_GROUP
 from state import media_buffer, pending_caption, last_instagram_link
 from utils import build_final_caption
 
+# ✅ تعریف app
 app = Client("my_userbot")
+
+# ✅ بعد از تعریف app، هندلرها رو ثبت کن
 from handlers import register_handlers
 register_handlers(app)
 
