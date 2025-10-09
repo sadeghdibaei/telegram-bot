@@ -152,12 +152,30 @@ async def handle_bot_response(client: Client, message: Message):
             if group_id not in pending_caption:
                 async def send_without_caption():
                     await asyncio.sleep(10)
+            
                     if media_buffer:
-                        await client.send_media_group(group_id, media=media_buffer)
-                        print("⏱️ Timeout: Sent media without caption")
+                        link = last_instagram_link.get(group_id, "")
+                        raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+                        escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+                        final_caption = escaped  # فقط لینک
+            
+                        if len(media_buffer) == 1:
+                            media = media_buffer[0]
+                            if isinstance(media, InputMediaPhoto):
+                                await client.send_photo(group_id, photo=media.media, caption=final_caption)
+                            elif isinstance(media, InputMediaVideo):
+                                await client.send_video(group_id, video=media.media, caption=final_caption)
+                            print("⏱️ Timeout: Sent single media with link caption")
+                        else:
+                            await client.send_media_group(group_id, media=media_buffer)
+                            await client.send_message(group_id, final_caption)
+                            print("⏱️ Timeout: Sent media group + link caption")
+            
                         media_buffer.clear()
+                        pending_caption.pop(group_id, None)
             
                 pending_caption[group_id] = asyncio.create_task(send_without_caption())
+
 
             # مرحله ۷: اگر کپشن داشت، ارسال همراه با مدیا
             elif message.text or message.caption:
