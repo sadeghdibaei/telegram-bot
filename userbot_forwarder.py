@@ -1,23 +1,29 @@
 # 🚀 Handles incoming Instagram links and media forwarding
 
+import os
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
-import asyncio
 
 from config import INSTAGRAM_REGEX, IDOWNLOADER_BOT, MAX_MEDIA_PER_GROUP
 from state import media_buffer, pending_caption, last_instagram_link
 from utils import build_final_caption
 
-# ✅ Create the Pyrogram client instance BEFORE any decorators
-app = Client("my_userbot")
+# ✅ Define Pyrogram client using environment variables
+app = Client(
+    "my_userbot",
+    api_id=int(os.getenv("API_ID")),
+    api_hash=os.getenv("API_HASH"),
+    session_string=os.getenv("SESSION_STRING")
+)
 
-# ✅ Register external handlers AFTER app is defined
+# ✅ Register external handlers after app is defined
 from handlers import register_handlers as register_bot_handlers
 from cdn_handler import register_handlers as register_cdn_handlers
 register_bot_handlers(app)
 register_cdn_handlers(app)
 
-# ✅ Local handler for Instagram links
+# ✅ Local handler for Instagram links in group messages
 @app.on_message(filters.group & filters.text)
 async def handle_instagram_link(client: Client, message: Message):
     match = INSTAGRAM_REGEX.search(message.text)
@@ -34,7 +40,7 @@ async def handle_instagram_link(client: Client, message: Message):
         except Exception as e:
             print("❌ Error sending to bot:", e)
 
-# ✅ Shared logic for sending media
+# ✅ Shared logic for sending media + caption
 async def send_album_with_caption(client: Client, group_id: int, caption: str):
     chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
     for index, chunk in enumerate(chunks):
@@ -44,6 +50,7 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     print("📝 Sent caption with link")
     media_buffer.clear()
 
+# ✅ Fallback timer if caption doesn't arrive
 async def fallback_send(client: Client, group_id: int):
     await asyncio.sleep(10)
     if media_buffer:
@@ -52,5 +59,5 @@ async def fallback_send(client: Client, group_id: int):
         await send_album_with_caption(client, group_id, final_caption)
         pending_caption.pop(group_id, None)
 
-# ✅ Run the bot
+# ✅ Start the userbot
 app.run()
