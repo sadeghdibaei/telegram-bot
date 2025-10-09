@@ -124,16 +124,36 @@ async def handle_bot_response(client: Client, message: Message):
 
         # 📝 Send media + final caption
         if media_buffer:
-            cleaned = clean_caption(message.caption or message.text or "")
-            raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
-            escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
-            final_caption = f"{cleaned}\n\n{escaped}"
-
+            # 🧹 Remove temporary messages before sending
+            cdn_notice_id = upload_state.get(group_id, {}).get("cdn_notice_id")
+            if cdn_notice_id:
+                await client.delete_messages(group_id, cdn_notice_id)
+        
+            processing_msg_id = upload_state.get(group_id, {}).get("processing_msg_id")
+            if processing_msg_id:
+                await client.delete_messages(group_id, processing_msg_id)
+        
+            # ⏳ Short delay to ensure cleanup
+            await asyncio.sleep(0.5)
+        
+            # 📤 Send media group in chunks of 10
             chunks = [media_buffer[i:i + 10] for i in range(0, len(media_buffer), 10)]
             for chunk in chunks:
                 await client.send_media_group(group_id, media=chunk)
-
+                print("📤 Sent media group chunk")
+        
+            # 📝 Build final caption from upload_state
+            cleaned = upload_state[group_id].get("caption", "")
+            link = upload_state[group_id].get("link", "")
+            raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+            escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+            final_caption = f"{cleaned}\n\n{escaped}"
+        
+            # 📥 Send final caption
             await client.send_message(group_id, final_caption)
+            print("📥 Sent caption with link")
+        
+            # 🧼 Clear buffer and state
             media_buffer.clear()
             upload_state.pop(group_id, None)
             return
@@ -160,22 +180,34 @@ async def handle_upload_response(client: Client, message: Message):
     # 🎬 Final video delivery
     if message.video:
         for group_id, state in upload_state.items():
+            # 🧹 Remove temporary messages before sending
             cdn_notice_id = state.get("cdn_notice_id")
             if cdn_notice_id:
                 await client.delete_messages(group_id, cdn_notice_id)
-
+    
             processing_msg_id = state.get("processing_msg_id")
             if processing_msg_id:
                 await client.delete_messages(group_id, processing_msg_id)
-
+    
+            # ⏳ Short delay to ensure cleanup
+            await asyncio.sleep(0.5)
+    
+            # 📝 Build final caption from upload_state
             cleaned = state.get("caption", "")
             link = state.get("link", "")
             raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
             escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
             final_caption = f"{cleaned}\n\n{escaped}"
-
-            await client.send_video(group_id, video=message.video.file_id, caption=final_caption)
-
+    
+            # 📤 Send video with final caption
+            await client.send_video(
+                group_id,
+                video=message.video.file_id,
+                caption=final_caption
+            )
+            print("📥 Final video + caption sent")
+    
+        # 🧼 Clear upload state
         upload_state.clear()
         return
 
