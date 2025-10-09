@@ -104,6 +104,7 @@ async def handle_instagram_link(client: Client, message: Message):
 async def handle_bot_response(client: Client, message: Message):
     try:
         for group_id, link in last_instagram_link.items():
+
             # مرحله ۱: بررسی وجود دکمه‌ها
             if message.reply_markup:
                 print("🔍 reply_markup detected, analyzing buttons...")
@@ -118,83 +119,94 @@ async def handle_bot_response(client: Client, message: Message):
                         print(f"   🌐 URL: {url}")
                         print(f"   📦 Callback: {callback}")
 
+                        # مرحله ۲: استخراج لینک CDN از دکمه
                         if url and "cdn" in url:
                             cdn_link = url
                             print(f"✅ Found CDN link: {cdn_link}")
 
+                            # مرحله ۳: پاک‌سازی کپشن
                             cleaned = clean_caption(message.text or message.caption or "")
+
+                            # مرحله ۴: ذخیره وضعیت برای مرحله بعدی
                             upload_state[group_id] = {
                                 "step": "waiting",
                                 "link": link,
                                 "caption": cleaned
                             }
 
+                            # مرحله ۵: ارسال لینک به @urluploadxbot
                             await client.send_message("urluploadxbot", cdn_link)
                             print(f"📤 Sent CDN link to @urluploadxbot")
                             return
 
-            # مرحله ۲: اگر کپشن داشت، اول پردازش کن
-            if message.text or message.caption:
+            # مرحله ۶: اگر پیام شامل مدیا بود، ذخیره در بافر
+            if message.photo:
+                media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
+                print("📥 Buffered photo")
+
+            elif message.video:
+                media_buffer.append(InputMediaVideo(media=message.video.file_id))
+                print("📥 Buffered video")
+
+            # اگر هنوز کپشن نیومده، تایمر راه بنداز
+            if group_id not in pending_caption:
+                async def send_without_caption():
+                    await asyncio.sleep(10)
+            
+                    if media_buffer:
+                        link = last_instagram_link.get(group_id, "")
+                        raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+                        escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+                        final_caption = escaped  # فقط لینک
+            
+                        if len(media_buffer) == 1:
+                            media = media_buffer[0]
+                            if isinstance(media, InputMediaPhoto):
+                                await client.send_photo(group_id, photo=media.media, caption=final_caption)
+                            elif isinstance(media, InputMediaVideo):
+                                await client.send_video(group_id, video=media.media, caption=final_caption)
+                            print("⏱️ Timeout: Sent single media with link caption")
+                        else:
+                            await client.send_media_group(group_id, media=media_buffer)
+                            await client.send_message(group_id, final_caption)
+                            print("⏱️ Timeout: Sent media group + link caption")
+            
+                        media_buffer.clear()
+                        pending_caption.pop(group_id, None)
+            
+                pending_caption[group_id] = asyncio.create_task(send_without_caption())
+
+
+            # مرحله ۷: اگر کپشن داشت، ارسال همراه با مدیا
+            elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
                 raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
 
+                MAX_MEDIA_PER_GROUP = 10
+
+                # اگر تایمر فعال بود، کنسلش کن
                 if pending_caption.get(group_id):
                     pending_caption[group_id].cancel()
                     del pending_caption[group_id]
                     print("🛑 Caption arrived: Cancelled timeout")
 
                 if media_buffer:
-                    MAX_MEDIA_PER_GROUP = 10
+                    # تقسیم آلبوم به دسته‌های 10‌تایی
                     chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
-
+                
                     for index, chunk in enumerate(chunks):
                         await client.send_media_group(group_id, media=chunk)
                         print(f"📤 Sent media group chunk {index + 1}/{len(chunks)}")
-
+                
+                    # ارسال کپشن نهایی بعد از آخرین chunk
                     await client.send_message(group_id, final_caption)
                     print("📥 Sent caption with link")
-
+                
                     media_buffer.clear()
                 else:
                     print("⚠️ No media found, caption skipped")
-                return  # چون کپشن رسید، ادامه نده
-
-            # مرحله ۳: اگر مدیا بود، بافر کن و تایمر بذار
-            if message.photo:
-                media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
-                print("📥 Buffered photo")
-            elif message.video:
-                media_buffer.append(InputMediaVideo(media=message.video.file_id))
-                print("📥 Buffered video")
-
-            if group_id not in pending_caption:
-                async def send_without_caption():
-                    await asyncio.sleep(10)
-
-                    if media_buffer:
-                        raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
-                        escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
-                        final_caption = escaped
-
-                        if len(media_buffer) == 1:
-                            media = media_buffer[0]
-                            if isinstance(media, InputMediaPhoto):
-                                await client.send_photo(group_id, photo=media.media)
-                            elif isinstance(media, InputMediaVideo):
-                                await client.send_video(group_id, video=media.media)
-                            await client.send_message(group_id, final_caption)
-                            print("⏱️ Timeout: Sent single media + separate link caption")
-                        else:
-                            await client.send_media_group(group_id, media=media_buffer)
-                            await client.send_message(group_id, final_caption)
-                            print("⏱️ Timeout: Sent media group + separate link caption")
-
-                        media_buffer.clear()
-                        pending_caption.pop(group_id, None)
-
-                pending_caption[group_id] = asyncio.create_task(send_without_caption())
 
     except Exception as e:
         print("❌ Error handling iDownloadersBot response:", e)
