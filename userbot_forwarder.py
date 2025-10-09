@@ -8,6 +8,10 @@ from config import INSTAGRAM_REGEX, IDOWNLOADER_BOT, MAX_MEDIA_PER_GROUP
 from state import media_buffer, pending_caption, last_instagram_link
 from utils import build_final_caption
 
+app = Client("my_userbot")
+from handlers import register_handlers
+register_handlers(app)
+
 @app.on_message(filters.group & filters.text)
 async def handle_instagram_link(client: Client, message: Message):
     """
@@ -49,3 +53,5 @@ async def fallback_send(client: Client, group_id: int):
         final_caption = build_final_caption(link)
         await send_album_with_caption(client, group_id, final_caption)
         pending_caption.pop(group_id, None)
+
+app.run()
