@@ -21,6 +21,7 @@ INSTAGRAM_REGEX = re.compile(r"(https?://)?(www\.)?instagram\.com/[^\s]+")
 last_instagram_link = {}  # chat_id → link
 media_buffer = []         # list of InputMediaPhoto/Video
 upload_state = {}         # group_id → {"step": "waiting"|"processing"}
+pending_caption = {}      # group_id → asyncio.Task
 
 # ---------------------------
 # Caption Cleaning
@@ -146,6 +147,17 @@ async def handle_bot_response(client: Client, message: Message):
                 media_buffer.append(InputMediaVideo(media=message.video.file_id))
                 print("📥 Buffered video")
 
+            # اگر هنوز کپشن نیومده، تایمر راه بنداز
+            if group_id not in pending_caption:
+                async def send_without_caption():
+                    await asyncio.sleep(10)
+                    if media_buffer:
+                        await client.send_media_group(group_id, media=media_buffer)
+                        print("⏱️ Timeout: Sent media without caption")
+                        media_buffer.clear()
+            
+                pending_caption[group_id] = asyncio.create_task(send_without_caption())
+
             # مرحله ۷: اگر کپشن داشت، ارسال همراه با مدیا
             elif message.text or message.caption:
                 cleaned = clean_caption(message.caption or message.text or "")
@@ -154,6 +166,12 @@ async def handle_bot_response(client: Client, message: Message):
                 final_caption = f"{cleaned}\n\n{escaped}"
 
                 MAX_MEDIA_PER_GROUP = 10
+
+                # اگر تایمر فعال بود، کنسلش کن
+                if pending_caption.get(group_id):
+                    pending_caption[group_id].cancel()
+                    del pending_caption[group_id]
+                    print("🛑 Caption arrived: Cancelled timeout")
 
                 if media_buffer:
                     # تقسیم آلبوم به دسته‌های 10‌تایی
