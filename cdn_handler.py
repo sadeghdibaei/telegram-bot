@@ -1,42 +1,56 @@
-import re
-from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
-from pyrogram import Client
+# ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+# ┃         CDN Handler for Userbot         ┃
+# ┃   Handles fallback media via @urluploadxbot ┃
+# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-# وضعیت مرحله‌ی آپلود
+import re
+from pyrogram import Client
+from pyrogram.types import Message
+
+# 📦 Shared upload state (imported from main file)
 upload_state = {}
 
+# ─────────────────────────────────────────────
+# 📥 MAIN HANDLER FUNCTION
+# ─────────────────────────────────────────────
 async def handle_cdn_link(client: Client, message: Message):
-    # مرحله ۱: استخراج لینک از دکمه‌ی شیشه‌ای
+    chat_id = message.chat.id
+
+    # ─────────────────────────────────────────────
+    # 🔍 STEP 1: Detect CDN link in inline buttons
+    # ─────────────────────────────────────────────
     if message.reply_markup:
         for row in message.reply_markup.inline_keyboard:
             for btn in row:
                 if btn.url and "cdninstagram.com" in btn.url:
                     cdn_link = btn.url
-                    chat_id = message.chat.id
-                
-                    # حذف پیام قبلی Processing...⏳ اگر وجود داشت
-                    old_msg_id = upload_state.get(chat_id, {}).get("processing_msg_id")
-                    if old_msg_id:
-                        await client.delete_messages(chat_id, old_msg_id)
-                
-                    # ارسال پیام مخصوص پست‌های حجیم
+
+                    # 🧹 Remove previous "Processing..." message
+                    processing_msg_id = upload_state.get(chat_id, {}).get("processing_msg_id")
+                    if processing_msg_id:
+                        await client.delete_messages(chat_id, processing_msg_id)
+
+                    # ⏳ Notify about large post
                     cdn_notice = await client.send_message(
                         chat_id,
                         "⏳ Large post detected. Processing via alternate CDN route..."
                     )
-                
-                    # ذخیره وضعیت
+
+                    # 🧠 Save state
                     upload_state[chat_id] = {
                         "step": "waiting",
                         "cdn_notice_id": cdn_notice.id
                     }
-                
+
+                    # 📤 Send CDN link to @urluploadxbot
                     await client.send_message("urluploadxbot", cdn_link)
-                    print("📤 Sent CDN link to @urluploadxbot")
+                    print(f"📤 Sent CDN link to @urluploadxbot")
                     return
 
-    # مرحله ۲: انتخاب گزینه‌ی دیفالت
-    if "rename" in message.text.lower() and message.reply_markup:
+    # ─────────────────────────────────────────────
+    # 🖱️ STEP 2: Auto-click "Default" button if rename prompt appears
+    # ─────────────────────────────────────────────
+    if message.text and "rename" in message.text.lower() and message.reply_markup:
         for row in message.reply_markup.inline_keyboard:
             for i, btn in enumerate(row):
                 if "default" in btn.text.lower():
@@ -46,36 +60,42 @@ async def handle_cdn_link(client: Client, message: Message):
                         upload_state[group_id]["step"] = "processing"
                     return
 
-    # مرحله ۳: دریافت ویدیو
-    if message.video and message.chat.id in upload_state:
-        chat_id = message.chat.id
+    # ─────────────────────────────────────────────
+    # 🎬 STEP 3: Final video received
+    # ─────────────────────────────────────────────
+    if message.video and chat_id in upload_state:
         print("📥 Final video received from @urluploadxbot")
-    
-        # حذف پیام اطلاع‌رسانی موقت
+
+        # 🧹 Remove temporary messages
         cdn_notice_id = upload_state[chat_id].get("cdn_notice_id")
         if cdn_notice_id:
             await client.delete_messages(chat_id, cdn_notice_id)
-    
+
         processing_msg_id = upload_state[chat_id].get("processing_msg_id")
         if processing_msg_id:
             await client.delete_messages(chat_id, processing_msg_id)
-    
+
+        # ✅ Return video file ID for final delivery
         upload_state.pop(chat_id, None)
         return message.video.file_id
 
-    # مرحله ۴: رد کردن پیام‌های غیرمفید
+    # ─────────────────────────────────────────────
+    # ⏭ STEP 4: Skip irrelevant messages
+    # ─────────────────────────────────────────────
     if message.photo or "۴ دقیقه" in message.text:
         print("⏭ Skipped non-video message from @urluploadxbot")
         return
 
-    chat_id = message.chat.id
+    # ─────────────────────────────────────────────
+    # ❌ STEP 5: Fallback failure
+    # ─────────────────────────────────────────────
     cdn_notice_id = upload_state.get(chat_id, {}).get("cdn_notice_id")
     if cdn_notice_id:
         await client.delete_messages(chat_id, cdn_notice_id)
-    
+
     processing_msg_id = upload_state.get(chat_id, {}).get("processing_msg_id")
     if processing_msg_id:
         await client.delete_messages(chat_id, processing_msg_id)
-    
+
     await client.send_message(chat_id, "❌ Failed to process the post. Please try again.")
     upload_state.pop(chat_id, None)
