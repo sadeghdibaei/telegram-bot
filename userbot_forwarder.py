@@ -1,18 +1,12 @@
-# ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-# ┃        Telegram Userbot Forwarder       ┃
-# ┃   Handles Instagram links, CDN fallback ┃
-# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
 import os
 import re
-import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 from cdn_handler import handle_cdn_link
 
-# ─────────────────────────────────────────────
-# 🔧 CONFIGURATION
-# ─────────────────────────────────────────────
+# ---------------------------
+# Config & Session
+# ---------------------------
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
@@ -20,17 +14,17 @@ TARGET_GROUP_ID = int(os.environ["TARGET_GROUP_ID"])
 
 app = Client("userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# ─────────────────────────────────────────────
-# 📦 STATE & BUFFERS
-# ─────────────────────────────────────────────
+# ---------------------------
+# State & Buffers
+# ---------------------------
 INSTAGRAM_REGEX = re.compile(r"(https?://)?(www\.)?instagram\.com/[^\s]+")
-last_instagram_link = {}  # group_id → link
+last_instagram_link = {}  # chat_id → link
 media_buffer = []         # list of InputMediaPhoto/Video
-upload_state = {}         # group_id → {"step": ..., "link": ..., "caption": ..., "processing_msg_id": ..., "cdn_notice_id": ...}
+upload_state = {}         # group_id → {"step": "waiting"|"processing"}
 
-# ─────────────────────────────────────────────
-# 🧼 CAPTION CLEANER
-# ─────────────────────────────────────────────
+# ---------------------------
+# Caption Cleaning
+# ---------------------------
 def clean_caption(text: str) -> str:
     blacklist = [
         "🤖 Downloaded with @iDownloadersBot",
@@ -40,195 +34,197 @@ def clean_caption(text: str) -> str:
         text = text.replace(phrase, "")
     return text.strip()
 
-# ─────────────────────────────────────────────
-# 🧪 TEST COMMAND
-# ─────────────────────────────────────────────
 @app.on_message(filters.command("testme"))
 async def test_me(client: Client, message: Message):
     await client.send_message("me", "✅ تست ارسال به Saved Messages")
 
-# ─────────────────────────────────────────────
-# 📥 STEP 1: Detect Instagram link in group
-# ─────────────────────────────────────────────
+# ---------------------------
+# Step 3: Delegate all messages from @urluploadxbot to cdn_handler
+# ---------------------------
+@app.on_message(filters.private & filters.user("urluploadxbot"))
+async def handle_upload_response(client: Client, message: Message):
+    await handle_cdn_link(client, message)
+
+# ---------------------------
+# Utility: Forward any inline-button message to Saved Messages
+# ---------------------------
+async def forward_message_and_buttons(client: Client, message: Message):
+    try:
+        print("📤 Forwarding message to Saved Messages...")
+        await message.forward("me")
+
+        lines = ["🔘 دکمه‌های شیشه‌ای موجود در پیام:"]
+        for row_index, row in enumerate(message.reply_markup.inline_keyboard):
+            for col_index, btn in enumerate(row):
+                label = btn.text
+                url = getattr(btn, "url", None)
+                callback = getattr(btn, "callback_data", None)
+
+                line = f"▪️ [{row_index},{col_index}] '{label}'"
+                if url:
+                    line += f"\n   🌐 URL: {url}"
+                if callback:
+                    line += f"\n   📦 Callback: {callback}"
+                lines.append(line)
+
+        summary = "\n".join(lines)
+        await client.send_message("me", summary)
+        print("📤 Sent button summary to Saved Messages")
+
+    except Exception as e:
+        print("❌ Error in forward_message_and_buttons:", e)
+
+# ---------------------------
+# Step 1: Detect Instagram link in group
+# ---------------------------
 @app.on_message(filters.group & filters.text)
 async def handle_instagram_link(client: Client, message: Message):
     match = INSTAGRAM_REGEX.search(message.text)
     if match:
-        link = match.group(0)
-        group_id = message.chat.id
+        try:
+            link = match.group(0)
+            last_instagram_link[message.chat.id] = link
+            media_buffer.clear()
 
-        last_instagram_link[group_id] = link
-        media_buffer.clear()
+            await client.send_message("iDownloadersBot", link)
+            print("📤 Sent link to iDownloadersBot")
 
-        await client.send_message("iDownloadersBot", link)
-        await message.delete()
+            await message.delete()
+            print("🗑️ Deleted original message")
 
-        # ⏳ Show processing message
-        processing_msg = await client.send_message(group_id, "Processing...⏳")
+        except Exception as e:
+            print("❌ Error sending to bot:", e)
 
-        # 🧠 Save state
-        upload_state[group_id] = {
-            "step": "waiting",
-            "link": link,
-            "processing_msg_id": processing_msg.id
-        }
-
-# ─────────────────────────────────────────────
-# 📤 STEP 2: Handle response from @iDownloadersBot
-# ─────────────────────────────────────────────
+# ---------------------------
+# Step 2: Handle response from iDownloadersBot and extract CDN link
+# ---------------------------
 @app.on_message(filters.private & filters.user("iDownloadersBot"))
 async def handle_bot_response(client: Client, message: Message):
-    for group_id, link in last_instagram_link.items():
-        # 🕒 Handle "Please wait..." messages
-        if message.text and "please wait" in message.text.lower():
-            match = re.search(r"please wait (\d+) second", message.text.lower())
-            wait_seconds = int(match.group(1)) if match else 11
+    try:
+        for group_id, link in last_instagram_link.items():
 
-            temp_msg = await client.send_message(group_id, message.text)
-            await asyncio.sleep(min(wait_seconds, 15))
-            await client.delete_messages(group_id, temp_msg.id)
-            return
+            # مرحله ۱: بررسی وجود دکمه‌ها
+            if message.reply_markup:
+                print("🔍 reply_markup detected, analyzing buttons...")
 
-        # 🧹 Clean up processing message
-        processing_msg_id = upload_state.get(group_id, {}).get("processing_msg_id")
-        if processing_msg_id:
-            await client.delete_messages(group_id, processing_msg_id)
+                for row_index, row in enumerate(message.reply_markup.inline_keyboard):
+                    for col_index, btn in enumerate(row):
+                        label = btn.text
+                        url = getattr(btn, "url", None)
+                        callback = getattr(btn, "callback_data", None)
 
-        # 🔍 Check for CDN button
-        if message.reply_markup:
-            for row in message.reply_markup.inline_keyboard:
-                for btn in row:
-                    url = getattr(btn, "url", None)
-                    if url and "cdn" in url:
-                        cdn_link = url
-                        cleaned = clean_caption(message.text or message.caption or "")
+                        print(f"🔘 Button [{row_index},{col_index}]: '{label}'")
+                        print(f"   🌐 URL: {url}")
+                        print(f"   📦 Callback: {callback}")
 
-                        # 🧠 Save state for CDN fallback
-                        upload_state[group_id] = {
-                            "step": "waiting",
-                            "link": link,
-                            "caption": cleaned
-                        }
+                        # مرحله ۲: استخراج لینک CDN از دکمه
+                        if url and "cdn" in url:
+                            cdn_link = url
+                            print(f"✅ Found CDN link: {cdn_link}")
 
-                        cdn_notice = await client.send_message(group_id, "⏳ Large post detected. Processing via alternate CDN route...")
-                        upload_state[group_id]["cdn_notice_id"] = cdn_notice.id
+                            # مرحله ۳: پاک‌سازی کپشن
+                            cleaned = clean_caption(message.text or message.caption or "")
 
-                        await client.send_message("urluploadxbot", cdn_link)
-                        return
+                            # مرحله ۴: ذخیره وضعیت برای مرحله بعدی
+                            upload_state[group_id] = {
+                                "step": "waiting",
+                                "link": link,
+                                "caption": cleaned
+                            }
 
-        # 📥 Buffer media
-        if message.photo:
-            media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
-        elif message.video:
-            media_buffer.append(InputMediaVideo(media=message.video.file_id))
+                            # مرحله ۵: ارسال لینک به @urluploadxbot
+                            await client.send_message("urluploadxbot", cdn_link)
+                            print(f"📤 Sent CDN link to @urluploadxbot")
+                            return
 
-        # 📝 Send media + final caption
-        if media_buffer:
-            # 🧹 Remove temporary messages before sending
-            cdn_notice_id = upload_state.get(group_id, {}).get("cdn_notice_id")
-            if cdn_notice_id:
-                await client.delete_messages(group_id, cdn_notice_id)
-        
-            processing_msg_id = upload_state.get(group_id, {}).get("processing_msg_id")
-            if processing_msg_id:
-                await client.delete_messages(group_id, processing_msg_id)
-        
-            # ⏳ Short delay to ensure cleanup
-            await asyncio.sleep(0.5)
-        
-            # 📤 Send media group in chunks of 10
-            chunks = [media_buffer[i:i + 10] for i in range(0, len(media_buffer), 10)]
-            for chunk in chunks:
-                await client.send_media_group(group_id, media=chunk)
-                print("📤 Sent media group chunk")
-        
-            # 📝 Build final caption from upload_state
-            cleaned = upload_state[group_id].get("caption", "")
-            link = upload_state[group_id].get("link", "")
-            raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
-            escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
-            final_caption = f"{cleaned}\n\n{escaped}"
-        
-            # 📥 Send final caption
-            await client.send_message(group_id, final_caption)
-            print("📥 Sent caption with link")
-        
-            # 🧼 Clear buffer and state
-            media_buffer.clear()
-            upload_state.pop(group_id, None)
-            return
+            # مرحله ۶: اگر پیام شامل مدیا بود، ذخیره در بافر
+            if message.photo:
+                media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
+                print("📥 Buffered photo")
 
-        # ❌ No media, no CDN → fail
-        await client.send_message(group_id, "❌ Failed to process the post. No media or CDN link found.")
-        upload_state.pop(group_id, None)
+            elif message.video:
+                media_buffer.append(InputMediaVideo(media=message.video.file_id))
+                print("📥 Buffered video")
 
-# ─────────────────────────────────────────────
-# 📦 STEP 3: Handle response from @urluploadxbot
-# ─────────────────────────────────────────────
+            # مرحله ۷: اگر کپشن داشت، ارسال همراه با مدیا
+            elif message.text or message.caption:
+                cleaned = clean_caption(message.caption or message.text or "")
+                raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+                escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+                final_caption = f"{cleaned}\n\n{escaped}"
+
+                MAX_MEDIA_PER_GROUP = 10
+
+                if media_buffer:
+                    # تقسیم آلبوم به دسته‌های 10‌تایی
+                    chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
+                
+                    for index, chunk in enumerate(chunks):
+                        await client.send_media_group(group_id, media=chunk)
+                        print(f"📤 Sent media group chunk {index + 1}/{len(chunks)}")
+                
+                    # ارسال کپشن نهایی بعد از آخرین chunk
+                    await client.send_message(group_id, final_caption)
+                    print("📥 Sent caption with link")
+                
+                    media_buffer.clear()
+                else:
+                    print("⚠️ No media found, caption skipped")
+
+    except Exception as e:
+        print("❌ Error handling iDownloadersBot response:", e)
+
+# ---------------------------
+# Step 3: Forward all inline-button messages from @urluploadxbot to Saved Messages
+# ---------------------------
 @app.on_message(filters.private & filters.user("urluploadxbot"))
 async def handle_upload_response(client: Client, message: Message):
-    # 🖱️ Auto-click "Default" button if rename prompt appears
-    if message.text and "rename" in message.text.lower() and message.reply_markup:
-        for row in message.reply_markup.inline_keyboard:
-            for i, btn in enumerate(row):
-                if "default" in btn.text.lower():
-                    await message.click(i)
-                    for group_id in upload_state:
-                        upload_state[group_id]["step"] = "processing"
-                    return
+    try:
+        if "rename" in message.text.lower() and message.reply_markup:
+            clicked = False
+            for row in message.reply_markup.inline_keyboard:
+                for i, btn in enumerate(row):
+                    if "default" in btn.text.lower():
+                        await message.click(i)
+                        print(f"✅ Clicked 'Default' button: {btn.text}")
+                        clicked = True
+                        for group_id in upload_state:
+                            upload_state[group_id]["step"] = "processing"
+                        break
+                if clicked:
+                    break
 
-    # 🎬 Final video delivery
-    if message.video:
-        for group_id, state in upload_state.items():
-            # 🧹 Remove temporary messages before sending
-            cdn_notice_id = state.get("cdn_notice_id")
-            if cdn_notice_id:
-                await client.delete_messages(group_id, cdn_notice_id)
-    
-            processing_msg_id = state.get("processing_msg_id")
-            if processing_msg_id:
-                await client.delete_messages(group_id, processing_msg_id)
-    
-            # ⏳ Short delay to ensure cleanup
-            await asyncio.sleep(0.5)
-    
-            # 📝 Build final caption from upload_state
-            cleaned = state.get("caption", "")
-            link = state.get("link", "")
-            raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
-            escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
-            final_caption = f"{cleaned}\n\n{escaped}"
-    
-            # 📤 Send video with final caption
-            await client.send_video(
-                group_id,
-                video=message.video.file_id,
-                caption=final_caption
-            )
-            print("📥 Final video + caption sent")
-    
-        # 🧼 Clear upload state
-        upload_state.clear()
-        return
+            if not clicked:
+                print("⚠️ No 'Default' button found, skipping rename step")
+            return
 
-    # 🧼 Skip irrelevant messages
-    if message.photo or "۴ دقیقه" in message.text:
-        return
+        if message.video:
+            for group_id, state in upload_state.items():
+                link = state.get("link")
+                cleaned = state.get("caption", "")
+                raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+                escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+                final_caption = f"{cleaned}\n\n{escaped}"
 
-    # ❌ Fallback failure
-    for group_id, state in upload_state.items():
-        cdn_notice_id = state.get("cdn_notice_id")
-        if cdn_notice_id:
-            await client.delete_messages(group_id, cdn_notice_id)
+                await client.send_video(
+                    group_id,
+                    video=message.video.file_id,
+                    caption=final_caption
+                )
+                print("📥 Final video + caption sent")
 
-        processing_msg_id = state.get("processing_msg_id")
-        if processing_msg_id:
-            await client.delete_messages(group_id, processing_msg_id)
+            upload_state.clear()
+            return
 
-        await client.send_message(group_id, "❌ Failed to process the post. Please try again.")
+        if message.photo or "۴ دقیقه" in message.text:
+            print("⏭ Skipped non-video message from @urluploadxbot")
+            return
 
-# ─────────────────────────────────────────────
-# 🚀 RUN
-# ─────────────────────────────────────────────
-print("🚀 Userbot is running with clean logic and CDN fallback...")
+    except Exception as e:
+        print("❌ Error handling upload response:", e)
+
+# ---------------------------
+# Run
+# ---------------------------
+print("🚀 Userbot is running with full CDN fallback logic...")
 app.run()
