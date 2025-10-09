@@ -186,8 +186,8 @@ async def handle_bot_response(client: Client, message: Message):
                     return
                 
                 
-                    except Exception as e:
-                        print("❌ Error handling iDownloadersBot response:", e)
+    except Exception as e:
+        print("❌ Error handling iDownloadersBot response:", e)
 
 # ---------------------------
 # Step 3: Forward all inline-button messages from @urluploadxbot to Saved Messages
