@@ -209,7 +209,14 @@ async def handle_bot_response(client: Client, message: Message):
                     for index, chunk in enumerate(chunks):
                         await client.send_media_group(group_id, media=chunk)
                         print(f"📤 Sent media group chunk {index + 1}/{len(chunks)}")
-            
+
+                    # ✅ ساخت کپشن نهایی از upload_state
+                    cleaned = upload_state[group_id].get("caption", "")
+                    link = upload_state[group_id].get("link", "")
+                    raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+                    escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+                    final_caption = f"{cleaned}\n\n{escaped}"
+    
                     # ارسال کپشن نهایی بعد از آخرین chunk
                     await client.send_message(group_id, final_caption)
                     print("📥 Sent caption with link")
@@ -272,9 +279,9 @@ async def handle_upload_response(client: Client, message: Message):
                 if processing_msg_id:
                     await client.delete_messages(group_id, processing_msg_id)
         
-                # ساخت کپشن نهایی
-                link = state.get("link")
-                cleaned = state.get("caption", "")
+                # ✅ ساخت کپشن نهایی از upload_state
+                cleaned = upload_state[chat_id].get("caption", "")
+                link = upload_state[chat_id].get("link", "")
                 raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
                 escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
                 final_caption = f"{cleaned}\n\n{escaped}"
