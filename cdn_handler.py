@@ -1,41 +1,44 @@
-import re
-from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
-from pyrogram import Client
+# 📦 Handles CDN link responses and final media delivery
 
-# وضعیت مرحله‌ی آپلود
-upload_state = {}
+from pyrogram import Client, filters
+from pyrogram.types import Message, InputMediaVideo, InputMediaPhoto
 
+from config import URLUPLOAD_BOT
+from state import upload_state, media_buffer
+from utils import build_final_caption
+
+@app.on_message(filters.private & filters.user(URLUPLOAD_BOT))
 async def handle_cdn_link(client: Client, message: Message):
-    # مرحله ۱: استخراج لینک از دکمه‌ی شیشه‌ای
-    if message.reply_markup:
-        for row in message.reply_markup.inline_keyboard:
-            for btn in row:
-                if btn.url and "cdninstagram.com" in btn.url:
-                    cdn_link = btn.url
-                    chat_id = message.chat.id
-                    upload_state[chat_id] = {"step": "waiting"}
-                    await client.send_message("urluploadxbot", cdn_link)
-                    print("📤 Sent CDN link to @urluploadxbot")
-                    return
+    """
+    🎬 Handles messages from @urluploadxbot and clicks 'Default' button.
+    """
+    try:
+        for group_id, state in upload_state.items():
+            if message.reply_markup:
+                for row in message.reply_markup.inline_keyboard:
+                    for i, btn in enumerate(row):
+                        if "default" in btn.text.lower():
+                            await message.click(i)
+                            print(f"✅ Clicked 'Default' button: {btn.text}")
+                            return
 
-    # مرحله ۲: انتخاب گزینه‌ی دیفالت
-    if "rename" in message.text.lower() and message.reply_markup:
-        for row in message.reply_markup.inline_keyboard:
-            for i, btn in enumerate(row):
-                if "default" in btn.text.lower():
-                    await message.click(i)
-                    print(f"✅ Clicked 'Default' button: {btn.text}")
-                    for group_id in upload_state:
-                        upload_state[group_id]["step"] = "processing"
-                    return
+            if message.video:
+                media = InputMediaVideo(media=message.video.file_id)
+            elif message.document and message.document.mime_type.startswith("video/"):
+                media = InputMediaVideo(media=message.document.file_id)
+            elif message.photo:
+                media = InputMediaPhoto(media=message.photo.file_id)
+            else:
+                print("⚠️ No valid media found in CDN response")
+                return
 
-    # مرحله ۳: دریافت ویدیو
-    if message.video and message.chat.id in upload_state:
-        print("📥 Final video received from @urluploadxbot")
-        upload_state.pop(message.chat.id, None)
-        return message.video.file_id
+            media_buffer.append(media)
+            caption = build_final_caption(state["link"], state["caption"])
+            await client.send_media_group(group_id, media=[media])
+            await client.send_message(group_id, caption)
+            print("📤 Sent final media + caption")
+            media_buffer.clear()
+            upload_state.pop(group_id, None)
 
-    # مرحله ۴: رد کردن پیام‌های غیرمفید
-    if message.photo or "۴ دقیقه" in message.text:
-        print("⏭ Skipped non-video message from @urluploadxbot")
-        return
+    except Exception as e:
+        print("❌ Error handling CDN response:", e)
