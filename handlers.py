@@ -12,60 +12,44 @@ from utils import build_final_caption
 def register_handlers(app: Client):
     @app.on_message(filters.private & filters.user(IDOWNLOADER_BOT))
     async def handle_bot_response(client: Client, message: Message):
-        """
-        🔁 Handles media, captions, CDN links, and fallback logic from iDownloadersBot.
-        """
         try:
-            for group_id, link in last_instagram_link.items():
-                print(f"📩 Received message from iDownloadersBot | group_id={group_id}")
+            chat_id = message.chat.id
+            group_id = chat_id  # 👈 فرض می‌گیریم group_id همونه
 
-                # 🎯 Check for CDN button
-                if message.reply_markup:
-                    for row in message.reply_markup.inline_keyboard:
-                        for btn in row:
-                            if btn.url and "cdn" in btn.url:
-                                cdn_link = btn.url
-                                caption = message.text or message.caption or ""
-                                upload_state[group_id] = {
-                                    "step": "waiting",
-                                    "link": link,
-                                    "caption": caption
-                                }
-                                await client.send_message("urluploadxbot", cdn_link)
-                                print("📤 Sent CDN link to @urluploadxbot")
-                                return
+            print(f"📩 Message from iDownloadersBot | chat_id={chat_id}")
 
-                # 📝 Check for caption
-                if message.text or message.caption:
-                    final_caption = build_final_caption(link, message.caption or message.text)
-                    if pending_caption.get(group_id):
-                        pending_caption[group_id].cancel()
-                        del pending_caption[group_id]
-                        print("🛑 Caption arrived: Cancelled timeout")
-                    if media_buffer:
-                        await send_album_with_caption(client, group_id, final_caption)
-                    else:
-                        print("⚠️ No media found, caption skipped")
-                    return
+            # 📸 Check for media first
+            if message.video:
+                media_buffer.append(InputMediaVideo(media=message.video.file_id))
+                print("📥 Buffered video")
+            elif message.photo:
+                media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
+                print("📥 Buffered photo")
+            else:
+                print("⚠️ No media found in message")
 
-                # 📸 Check for media
-                if message.photo:
-                    media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
-                    print("📥 Buffered photo")
-                elif message.video:
-                    media_buffer.append(InputMediaVideo(media=message.video.file_id))
-                    print("📥 Buffered video")
-                elif message.document and message.document.mime_type.startswith("video/"):
-                    media_buffer.append(InputMediaVideo(media=message.document.file_id))
-                    print("📥 Buffered video from document")
+            # 📝 Then check for caption
+            if message.text or message.caption:
+                final_caption = build_final_caption(
+                    last_instagram_link.get(group_id, ""),
+                    message.caption or message.text
+                )
+                if pending_caption.get(group_id):
+                    pending_caption[group_id].cancel()
+                    del pending_caption[group_id]
+                    print("🛑 Caption arrived: Cancelled timeout")
+                if media_buffer:
+                    await send_album_with_caption(client, group_id, final_caption)
                 else:
-                    print("⚠️ Message has no media content")
+                    print("⚠️ Caption arrived but no media buffered")
+                return
 
-                # ⏱️ Start fallback timer
-                if group_id not in pending_caption:
-                    pending_caption[group_id] = asyncio.create_task(fallback_send(client, group_id))
+            # ⏱️ Fallback if only media arrived
+            if group_id not in pending_caption:
+                pending_caption[group_id] = asyncio.create_task(fallback_send(client, group_id))
 
         except Exception as e:
+            import traceback
             print("❌ Error handling iDownloadersBot response:", e)
             traceback.print_exc()
 
