@@ -6,7 +6,7 @@ import asyncio
 import traceback
 
 from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT
-from state import media_buffer, pending_caption, upload_state, last_instagram_link
+from state import media_buffer, pending_caption, last_instagram_link
 from utils import build_final_caption
 
 def register_handlers(app: Client):
@@ -18,20 +18,24 @@ def register_handlers(app: Client):
 
             print(f"📩 Message from iDownloadersBot | chat_id={chat_id}")
 
-            # 📸 مدیا اول بررسی بشه
+            # 📸 فقط مدیا رو بافر کن — کپشن رو نادیده بگیر
             if message.video:
                 media_buffer.append(InputMediaVideo(media=message.video.file_id))
                 print("📥 Buffered video")
+                return
             elif message.photo:
                 media_buffer.append(InputMediaPhoto(media=message.photo.file_id))
                 print("📥 Buffered photo")
-            else:
-                print("⚠️ No media found in message")
+                return
 
-            # 📝 کپشن بعد بررسی بشه
-            if message.text or message.caption:
+            # 📝 فقط کپشن جداگانه رو قبول کن
+            if message.text:
                 link = last_instagram_link.get(group_id, "")
-                final_caption = build_final_caption(link, message.caption or message.text)
+                if not link:
+                    print("⚠️ Empty link passed to build_final_caption")
+                    return
+
+                final_caption = build_final_caption(link, message.text)
 
                 if pending_caption.get(group_id):
                     pending_caption[group_id].cancel()
@@ -44,9 +48,7 @@ def register_handlers(app: Client):
                     print("⚠️ Caption arrived but no media buffered")
                 return
 
-            # ⏱️ fallback فقط اگر کپشن نیومده
-            if group_id not in pending_caption:
-                pending_caption[group_id] = asyncio.create_task(fallback_send(client, group_id))
+            print("⚠️ Message has no media or usable caption")
 
         except Exception as e:
             print("❌ Error handling iDownloadersBot response:", e)
@@ -66,5 +68,8 @@ async def fallback_send(client: Client, group_id: int):
     await asyncio.sleep(10)
     if media_buffer:
         link = last_instagram_link.get(group_id, "")
+        if not link:
+            print("⚠️ Empty link in fallback")
+            return
         final_caption = build_final_caption(link)
         await send_album_with_caption(client, group_id, final_caption)
