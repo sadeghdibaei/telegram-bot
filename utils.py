@@ -3,7 +3,13 @@
 def clean_caption(text: str) -> str:
     if not text:
         return ""
-    return text.strip().replace("#", "").replace("🔥", "").replace("📸", "")
+    blacklist = [
+        "🤖 Downloaded with @iDownloadersBot",
+        "🤖 دریافت شده توسط @iDownloadersBot"
+    ]
+    for phrase in blacklist:
+        text = text.replace(phrase, "")
+    return text.strip()
 
 def build_final_caption(link: str, original_caption: str = "") -> str:
     cleaned = clean_caption(original_caption)
