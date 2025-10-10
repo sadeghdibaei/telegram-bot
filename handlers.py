@@ -3,19 +3,22 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 import asyncio
+import traceback  # 👈 اضافه برای لاگ دقیق‌تر
 
-from config import MAX_MEDIA_PER_GROUP
+from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT
 from state import media_buffer, pending_caption, upload_state, last_instagram_link
 from utils import build_final_caption
 
 def register_handlers(app: Client):
-    @app.on_message(filters.private & filters.user("iDownloadersBot"))
+    @app.on_message(filters.private & filters.user(IDOWNLOADER_BOT))
     async def handle_bot_response(client: Client, message: Message):
         """
         🔁 Handles media, captions, CDN links, and fallback logic from iDownloadersBot.
         """
         try:
             for group_id, link in last_instagram_link.items():
+                print(f"📩 Received message from iDownloadersBot | group_id={group_id}")
+
                 # 🎯 Check for CDN button
                 if message.reply_markup:
                     for row in message.reply_markup.inline_keyboard:
@@ -52,6 +55,11 @@ def register_handlers(app: Client):
                 elif message.video:
                     media_buffer.append(InputMediaVideo(media=message.video.file_id))
                     print("📥 Buffered video")
+                elif message.document and message.document.mime_type.startswith("video/"):
+                    media_buffer.append(InputMediaVideo(media=message.document.file_id))
+                    print("📥 Buffered video from document")
+                else:
+                    print("⚠️ Message has no media content")
 
                 # ⏱️ Start fallback timer
                 if group_id not in pending_caption:
@@ -59,11 +67,10 @@ def register_handlers(app: Client):
 
         except Exception as e:
             print("❌ Error handling iDownloadersBot response:", e)
+            traceback.print_exc()
 
+# ✅ Shared logic for sending media + caption
 async def send_album_with_caption(client: Client, group_id: int, caption: str):
-    """
-    📸 Sends media in chunks of 10 with a separate caption message.
-    """
     chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
     for index, chunk in enumerate(chunks):
         await client.send_media_group(group_id, media=chunk)
@@ -72,10 +79,8 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     print("📝 Sent caption with link")
     media_buffer.clear()
 
+# ✅ Fallback timer if caption doesn't arrive
 async def fallback_send(client: Client, group_id: int):
-    """
-    ⏱️ Sends media with link-only caption if no caption arrives within 10 seconds.
-    """
     await asyncio.sleep(10)
     if media_buffer:
         link = last_instagram_link.get(group_id, "")
