@@ -87,7 +87,13 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         log.info(f"⏭ No pending single for chat {chat_id}")
         return
 
-    caption = extract_linked_caption(data.get("caption") or "")
+    # استخراج لینک از دکمه یا کپشن
+    url = extract_button_url(data["raw_msgs"][0])
+    if not url:
+        url = extract_link_from_caption(data.get("caption") or "")
+
+    # بازسازی کپشن
+    caption = rebuild_caption(data.get("caption") or "", url)
     log.info(f"🚀 Flushing single {data['type']} to {chat_id} | file_id={data['file_id']}")
 
     try:
@@ -116,22 +122,20 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
         log.info(f"⏭ No pending media for group {group_id} in chat {chat_id}")
         return
 
-    caption = extract_linked_caption(data.get("caption") or "")
+    # استخراج لینک از دکمه یا کپشن
+    url = extract_button_url(data["raw_msgs"][0])
+    if not url:
+        url = extract_link_from_caption(data.get("caption") or "")
+
+    # بازسازی کپشن
+    caption = rebuild_caption(data.get("caption") or "", url)
     log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id}")
 
     first = data["media"][0]
     if isinstance(first, InputMediaPhoto):
-        data["media"][0] = InputMediaPhoto(
-            media=first.media,
-            caption=caption,
-            parse_mode=ParseMode.HTML  # 👈 استفاده از ثابت رسمی
-        )
+        data["media"][0] = InputMediaPhoto(first.media, caption=caption, parse_mode="HTML")
     elif isinstance(first, InputMediaVideo):
-        data["media"][0] = InputMediaVideo(
-            media=first.media,
-            caption=caption,
-            parse_mode=ParseMode.HTML  # 👈 استفاده از ثابت رسمی
-        )
+        data["media"][0] = InputMediaVideo(first.media, caption=caption, parse_mode="HTML")
 
     try:
         res = await context.bot.send_media_group(chat_id, media=data["media"])
