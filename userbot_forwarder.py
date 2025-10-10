@@ -30,7 +30,9 @@ async def handle_instagram_link(client: Client, message: Message):
     if match:
         try:
             link = match.group(0)
-            last_instagram_link[message.chat.id] = link
+            group_id = message.chat.id
+
+            last_instagram_link[group_id] = link
             media_buffer.clear()
 
             await client.send_message(IDOWNLOADER_BOT, link)
