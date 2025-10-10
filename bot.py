@@ -56,19 +56,21 @@ def clean_caption(text: Optional[str]) -> str:
         return ""
     return text.replace("🤖 Downloaded with @iDownloadersBot", "").strip()
 
-def extract_linked_caption(caption: Optional[str]) -> str:
-    """از کپشن HTML لینک را استخراج کرده و دوباره با فرمت صحیح می‌سازد."""
+# جدا کردن منطق
+def extract_link_from_caption(caption: Optional[str]) -> Optional[str]:
     if not caption:
-        return ""
+        return None
     match = re.search(r'<a href="([^"]+)">O P E N P O S T ⎋</a>', caption)
-    link = match.group(1) if match else None
+    return match.group(1) if match else None
+
+def rebuild_caption(caption: str, url: Optional[str]) -> str:
     cleaned = re.sub(r'<a href="[^"]+">O P E N P O S T ⎋</a>', '', caption).strip()
     cleaned = shorten_caption(clean_caption(cleaned), MAX_CAPTION)
-    if link:
-        return f"{cleaned}\n\n<a href=\"{link}\">O P E N P O S T ⎋</a>"
+    if url:
+        return f"{cleaned}\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
     else:
         return cleaned
-
+      
 def extract_button_url(msg) -> Optional[str]:
     if not msg or not msg.reply_markup or not msg.reply_markup.inline_keyboard:
         return None
