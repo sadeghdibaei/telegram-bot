@@ -17,10 +17,9 @@ def build_final_caption(link: str, original_caption: str = "") -> str:
         print("⚠️ Empty link passed to build_final_caption")
         return cleaned or "⚠️ No link available"
 
-    # تگ HTML خام
+    # Build anchor and escape so Telegram won’t auto-hyperlink it
     raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
-    # تبدیل به escape تا تلگرام دستکاریش نکنه
     escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
 
-    # کپشن نهایی
+    # Caption: cleaned text + escaped anchor block
     return f"{cleaned}\n\n{escaped}" if cleaned else escaped
