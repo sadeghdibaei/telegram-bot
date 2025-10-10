@@ -58,12 +58,19 @@ def clean_caption(text: Optional[str]) -> str:
 
 # جدا کردن منطق
 def extract_link_from_caption(caption: Optional[str]) -> Optional[str]:
+    """لینک داخل تگ HTML یا متن ساده را از کپشن استخراج می‌کند."""
     if not caption:
         return None
+    # اول تلاش برای گرفتن از تگ HTML
     match = re.search(r'<a href="([^"]+)">O P E N P O S T ⎋</a>', caption)
+    if match:
+        return match.group(1)
+    # اگر فقط متن لینک بود
+    match = re.search(r'(https://www\.instagram\.com/[^\s]+)', caption)
     return match.group(1) if match else None
 
 def rebuild_caption(caption: str, url: Optional[str]) -> str:
+    """تگ HTML را حذف کرده و کپشن را با لینک بازسازی می‌کند."""
     cleaned = re.sub(r'<a href="[^"]+">O P E N P O S T ⎋</a>', '', caption).strip()
     cleaned = shorten_caption(clean_caption(cleaned), MAX_CAPTION)
     if url:
@@ -97,6 +104,8 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     # بازسازی کپشن
     caption = rebuild_caption(data.get("caption") or "", url)
     log.info(f"🚀 Flushing single {data['type']} to {chat_id} | file_id={data['file_id']}")
+    log.info(f"📎 Final caption: {caption}")
+    log.info(f"🔗 Extracted URL: {url}")
 
     try:
         if data["type"] == "photo":
@@ -132,6 +141,8 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
     # بازسازی کپشن
     caption = rebuild_caption(data.get("caption") or "", url)
     log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id}")
+    log.info(f"📎 Final caption: {caption}")
+    log.info(f"🔗 Extracted URL: {url}")
 
     first = data["media"][0]
     if isinstance(first, InputMediaPhoto):
