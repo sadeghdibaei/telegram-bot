@@ -16,4 +16,11 @@ def build_final_caption(link: str, original_caption: str = "") -> str:
     if not link:
         print("⚠️ Empty link passed to build_final_caption")
         return cleaned or "⚠️ No link available"
-    return f"{cleaned}\n\n<a href=\"{link}\">O P E N P O S T ⎋</a>" if cleaned else f"<a href=\"{link}\">O P E N P O S T ⎋</a>"
+
+    # تگ HTML خام
+    raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+    # تبدیل به escape تا تلگرام دستکاریش نکنه
+    escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+
+    # کپشن نهایی
+    return f"{cleaned}\n\n{escaped}" if cleaned else escaped
