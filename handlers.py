@@ -3,7 +3,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 import asyncio
-import traceback  # 👈 اضافه برای لاگ دقیق‌تر
+import traceback
 
 from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT
 from state import media_buffer, pending_caption, upload_state, last_instagram_link
@@ -14,11 +14,11 @@ def register_handlers(app: Client):
     async def handle_bot_response(client: Client, message: Message):
         try:
             chat_id = message.chat.id
-            group_id = chat_id  # 👈 فرض می‌گیریم group_id همونه
+            group_id = chat_id  # فرض بر اینه که group_id همونه
 
             print(f"📩 Message from iDownloadersBot | chat_id={chat_id}")
 
-            # 📸 Check for media first
+            # 📸 مدیا اول بررسی بشه
             if message.video:
                 media_buffer.append(InputMediaVideo(media=message.video.file_id))
                 print("📥 Buffered video")
@@ -28,32 +28,30 @@ def register_handlers(app: Client):
             else:
                 print("⚠️ No media found in message")
 
-            # 📝 Then check for caption
+            # 📝 کپشن بعد بررسی بشه
             if message.text or message.caption:
-                final_caption = build_final_caption(
-                    last_instagram_link.get(group_id, ""),
-                    message.caption or message.text
-                )
+                link = last_instagram_link.get(group_id, "")
+                final_caption = build_final_caption(link, message.caption or message.text)
+
                 if pending_caption.get(group_id):
                     pending_caption[group_id].cancel()
                     del pending_caption[group_id]
                     print("🛑 Caption arrived: Cancelled timeout")
+
                 if media_buffer:
                     await send_album_with_caption(client, group_id, final_caption)
                 else:
                     print("⚠️ Caption arrived but no media buffered")
                 return
 
-            # ⏱️ Fallback if only media arrived
+            # ⏱️ fallback فقط اگر کپشن نیومده
             if group_id not in pending_caption:
                 pending_caption[group_id] = asyncio.create_task(fallback_send(client, group_id))
 
         except Exception as e:
-            import traceback
             print("❌ Error handling iDownloadersBot response:", e)
             traceback.print_exc()
 
-# ✅ Shared logic for sending media + caption
 async def send_album_with_caption(client: Client, group_id: int, caption: str):
     chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
     for index, chunk in enumerate(chunks):
@@ -62,12 +60,11 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     await client.send_message(group_id, caption)
     print("📝 Sent caption with link")
     media_buffer.clear()
+    pending_caption.pop(group_id, None)
 
-# ✅ Fallback timer if caption doesn't arrive
 async def fallback_send(client: Client, group_id: int):
     await asyncio.sleep(10)
     if media_buffer:
         link = last_instagram_link.get(group_id, "")
         final_caption = build_final_caption(link)
         await send_album_with_caption(client, group_id, final_caption)
-        pending_caption.pop(group_id, None)
