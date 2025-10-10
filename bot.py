@@ -213,4 +213,84 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if grp["timer"]:
                 grp["timer"].cancel()
                 log.info(f"⏹ Reset group timer for {group_id}")
-            grp["timer"] = asyncio.create_task(group_timer_task
+            grp["timer"] = asyncio.create_task(group_timer_task(group_id, chat_id, context))
+            return
+
+        # تک‌مدیا (single photo/video)
+        if msg.photo or msg.video:
+            media_type = "photo" if msg.photo else "video"
+            log.info(f"📥 Received single {media_type} in chat {chat_id}")
+
+            if chat_id in pending_single:
+                t = pending_single[chat_id].get("timer")
+                if t:
+                    t.cancel()
+                    log.info(f"⏹ Cancelled previous single timer in chat {chat_id}")
+                await flush_single(chat_id, context)
+
+            file_id = msg.photo[-1].file_id if msg.photo else msg.video.file_id
+            pending_single[chat_id] = {
+                "file_id": file_id,
+                "type": media_type,
+                "caption": msg.caption or None,
+                "button_url": button_url_in or None,
+                "raw_msgs": [msg],
+                "timer": None,
+            }
+            log.info(f"➕ Added pending single {media_type} in chat {chat_id} | file_id={file_id}")
+
+            t = asyncio.create_task(single_timer_task(chat_id, context))
+            pending_single[chat_id]["timer"] = t
+            return
+
+        # کپشن جدا (text که بعد از مدیا می‌آید)
+        if msg.text:
+            text = msg.text
+            log.info(f"📥 Received text in chat {chat_id}: {text[:40]}...")
+
+            if chat_id in pending_single:
+                data = pending_single[chat_id]
+                t = data.get("timer")
+                if t:
+                    t.cancel()
+                    log.info(f"⏹ Cancelled single timer in chat {chat_id} (caption arrived)")
+                if text:
+                    data["caption"] = text
+                if button_url_in and not data["button_url"]:
+                    data["button_url"] = button_url_in
+                data["raw_msgs"].append(msg)
+                await flush_single(chat_id, context)
+                return
+
+            group_id = last_group_by_chat.get(chat_id)
+            if group_id and group_id in pending_groups:
+                grp = pending_groups[group_id]
+                grp["caption"] = text
+                if button_url_in and not grp["button_url"]:
+                    grp["button_url"] = button_url_in
+                grp["raw_msgs"].append(msg)
+                if grp["timer"]:
+                    grp["timer"].cancel()
+                    log.info(f"⏹ Cancelled group timer for {group_id} (caption arrived)")
+                grp["timer"] = asyncio.create_task(group_timer_task(group_id, chat_id, context))
+                return
+
+    except Exception as e:
+        log.error(f"❌ Handle failed in chat {chat_id}: {e}")
+
+# ---------------------------
+# Handler registration
+# ---------------------------
+app.add_handler(MessageHandler(filters.ALL, handle))
+
+log.info("🤖 Bot is running on Railway...")
+
+# ---------------------------
+# Webhook runner
+# ---------------------------
+app.run_webhook(
+    listen="0.0.0.0",
+    port=PORT,
+    url_path=BOT_TOKEN,
+    webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+)
