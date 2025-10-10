@@ -121,9 +121,17 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
 
     first = data["media"][0]
     if isinstance(first, InputMediaPhoto):
-        data["media"][0] = InputMediaPhoto(first.media, caption=caption, parse_mode="HTML")
+        data["media"][0] = InputMediaPhoto(
+            media=first.media,
+            caption=caption,
+            parse_mode=ParseMode.HTML  # 👈 استفاده از ثابت رسمی
+        )
     elif isinstance(first, InputMediaVideo):
-        data["media"][0] = InputMediaVideo(first.media, caption=caption, parse_mode="HTML")
+        data["media"][0] = InputMediaVideo(
+            media=first.media,
+            caption=caption,
+            parse_mode=ParseMode.HTML  # 👈 استفاده از ثابت رسمی
+        )
 
     try:
         res = await context.bot.send_media_group(chat_id, media=data["media"])
