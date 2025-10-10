@@ -56,7 +56,8 @@ def clean_caption(text: Optional[str]) -> str:
         return ""
     return text.replace("🤖 Downloaded with @iDownloadersBot", "").strip()
 
-# جدا کردن منطق
+import re
+
 def extract_link_from_caption(caption: Optional[str]) -> Optional[str]:
     """لینک داخل تگ HTML یا متن ساده را از کپشن استخراج می‌کند."""
     if not caption:
@@ -66,8 +67,19 @@ def extract_link_from_caption(caption: Optional[str]) -> Optional[str]:
     if match:
         return match.group(1)
     # اگر فقط متن لینک بود
-    match = re.search(r'(https://www\.instagram\.com/[^\s]+)', caption)
+    match = re.search(r'(https?://[^\s]+)', caption)
     return match.group(1) if match else None
+
+def extract_link_from_raw_msgs(raw_msgs: list) -> Optional[str]:
+    """لینک را از پیام‌هایی که شامل O P E N P O S T ⎋ هستند استخراج می‌کند."""
+    for m in raw_msgs:
+        if not m.text:
+            continue
+        if "O P E N P O S T ⎋" in m.text:
+            match = re.search(r"(https?://[^\s]+)", m.text)
+            if match:
+                return match.group(1)
+    return None
 
 def rebuild_caption(caption: str, url: Optional[str]) -> str:
     """تگ HTML را حذف کرده و کپشن را با لینک بازسازی می‌کند."""
@@ -96,10 +108,12 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         log.info(f"⏭ No pending single for chat {chat_id}")
         return
 
-    # استخراج لینک از دکمه یا کپشن
+    # استخراج لینک از دکمه یا پیام متنی
     url = extract_button_url(data["raw_msgs"][0])
     if not url:
-        url = extract_link_from_caption(data.get("caption") or "")
+        url = extract_link_from_raw_msgs(data["raw_msgs"])
+        if not url:
+            url = extract_link_from_caption(data.get("caption") or "")
 
     # بازسازی کپشن
     caption = rebuild_caption(data.get("caption") or "", url)
@@ -133,10 +147,12 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
         log.info(f"⏭ No pending media for group {group_id} in chat {chat_id}")
         return
 
-    # استخراج لینک از دکمه یا کپشن
+    # استخراج لینک از دکمه یا پیام متنی
     url = extract_button_url(data["raw_msgs"][0])
     if not url:
-        url = extract_link_from_caption(data.get("caption") or "")
+        url = extract_link_from_raw_msgs(data["raw_msgs"])
+        if not url:
+            url = extract_link_from_caption(data.get("caption") or "")
 
     # بازسازی کپشن
     caption = rebuild_caption(data.get("caption") or "", url)
