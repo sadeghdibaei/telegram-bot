@@ -56,7 +56,33 @@ def clean_caption(text: Optional[str]) -> str:
         return ""
     return text.replace("🤖 Downloaded with @iDownloadersBot", "").strip()
 
-import re
+def extract_link_from_caption_or_text(caption: Optional[str], raw_msgs: list) -> Optional[str]:
+    """لینک را از کپشن (هایپرلینک یا متن ساده) یا پیام‌های خام استخراج می‌کند."""
+    if not caption and not raw_msgs:
+        return None
+
+    # ۱. تلاش برای گرفتن از تگ HTML داخل کپشن
+    if caption:
+        match = re.search(r'<a href="([^"]+)">O P E N P O S T ⎋</a>', caption)
+        if match:
+            return match.group(1)
+
+    # ۲. تلاش برای گرفتن از متن ساده داخل کپشن
+    if caption and "O P E N P O S T ⎋" in caption:
+        match = re.search(r'(https?://[^\s]+)', caption)
+        if match:
+            return match.group(1)
+
+    # ۳. تلاش برای گرفتن از پیام‌های خام (raw_msgs)
+    for m in raw_msgs:
+        if not m.text:
+            continue
+        if "O P E N P O S T ⎋" in m.text:
+            match = re.search(r'(https?://[^\s]+)', m.text)
+            if match:
+                return match.group(1)
+
+    return None
 
 def extract_link_from_caption(caption: Optional[str]) -> Optional[str]:
     """لینک داخل تگ HTML یا متن ساده را از کپشن استخراج می‌کند."""
@@ -108,12 +134,11 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         log.info(f"⏭ No pending single for chat {chat_id}")
         return
 
-    # استخراج لینک از دکمه یا پیام متنی
+    # استخراج لینک از دکمه یا کپشن/متن
     url = extract_button_url(data["raw_msgs"][0])
     if not url:
-        url = extract_link_from_raw_msgs(data["raw_msgs"])
-        if not url:
-            url = extract_link_from_caption(data.get("caption") or "")
+        url = extract_link_from_caption_or_text(data.get("caption") or "", data["raw_msgs"])
+
 
     # بازسازی کپشن
     caption = rebuild_caption(data.get("caption") or "", url)
