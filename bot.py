@@ -134,11 +134,13 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         log.info(f"⏭ No pending single for chat {chat_id}")
         return
 
+    # 📝 لاگ کپشن دریافتی
+    log.info(f"📝 Raw caption received: {data.get('caption')}")
+
     # استخراج لینک از دکمه یا کپشن/متن
     url = extract_button_url(data["raw_msgs"][0])
     if not url:
         url = extract_link_from_caption_or_text(data.get("caption") or "", data["raw_msgs"])
-
 
     # بازسازی کپشن
     caption = rebuild_caption(data.get("caption") or "", url)
@@ -172,12 +174,13 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
         log.info(f"⏭ No pending media for group {group_id} in chat {chat_id}")
         return
 
-    # استخراج لینک از دکمه یا پیام متنی
+    # 📝 لاگ کپشن دریافتی
+    log.info(f"📝 Raw caption received: {data.get('caption')}")
+
+    # استخراج لینک از دکمه یا کپشن/متن
     url = extract_button_url(data["raw_msgs"][0])
     if not url:
-        url = extract_link_from_raw_msgs(data["raw_msgs"])
-        if not url:
-            url = extract_link_from_caption(data.get("caption") or "")
+        url = extract_link_from_caption_or_text(data.get("caption") or "", data["raw_msgs"])
 
     # بازسازی کپشن
     caption = rebuild_caption(data.get("caption") or "", url)
