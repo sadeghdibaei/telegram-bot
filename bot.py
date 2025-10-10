@@ -72,15 +72,6 @@ def build_caption(base_caption: str, url: Optional[str]) -> str:
         caption += f"\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
     return caption
 
-def extract_open_post_link(text: str) -> Optional[str]:
-    """اگر متن شامل O P E N P O S T ⎋ + لینک خط بعدی بود، لینک را برمی‌گرداند."""
-    if not text:
-        return None
-    lines = text.splitlines()
-    if len(lines) >= 2 and "O P E N P O S T ⎋" in lines[0]:
-        return lines[1].strip()
-    return None
-
 def extract_button_url(msg) -> Optional[str]:
     """اگر دکمه‌ی با URL داخل reply_markup باشد، URL را استخراج می‌کند."""
     if not msg or not msg.reply_markup or not msg.reply_markup.inline_keyboard:
@@ -102,16 +93,12 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         return
 
     caption_text = data.get("caption") or ""   # 👈 اگر کپشن نبود، رشته خالی
-    url = data.get("button_url")
+    caption = build_caption(caption_text, data.get("button_url"))
+    log.info(f"🚀 Flushing single {data['type']} to {chat_id} (caption={'yes' if caption_text else 'no'})")
 
-    # اگر کپشن فرمت O P E N P O S T ⎋ + لینک داشت، لینک رو استخراج کن
-    if not url:
-        url = extract_open_post_link(caption_text)
 
-    caption = build_caption(caption_text, url)
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
     log.info(f"🚀 Flushing single {data['type']} to {chat_id} | file_id={data['file_id']}")
-    log.info(f"📎 Final caption: {caption}")
-    log.info(f"🔗 Extracted URL: {url}")
 
     try:
         if data["type"] == "photo":
@@ -142,15 +129,12 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
         return
 
     caption_text = data.get("caption") or ""
-    url = data.get("button_url")
+    caption = build_caption(caption_text, data.get("button_url"))
+    log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id} (caption={'yes' if caption_text else 'no'})")
 
-    if not url:
-        url = extract_open_post_link(caption_text)
 
-    caption = build_caption(caption_text, url)
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
     log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id}")
-    log.info(f"📎 Final caption: {caption}")
-    log.info(f"🔗 Extracted URL: {url}")
 
     # آیتم اول با کپشن ساخته می‌شود
     first = data["media"][0]
