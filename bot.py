@@ -2,7 +2,6 @@ import os
 import asyncio
 import logging
 import sys
-import re
 from typing import Dict, Optional
 from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
@@ -10,6 +9,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 # ---------------------------
 # Logging setup
 # ---------------------------
+# سطح لاگ INFO برای دیدن جریان کار. فرمت ساده و خوانا.
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s",
                     stream=sys.stdout
@@ -31,22 +31,29 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 # ---------------------------
 # Config
 # ---------------------------
+# اندازه‌ی بلوک لینک انتهایی برای جا گذاشتن فضای caption
 EXTRA_LINK_BLOCK = 60
 MAX_CAPTION = 1024 - EXTRA_LINK_BLOCK
+
+# تاخیر برای جمع‌آوری پیام‌ها پیش از ارسال (debounce)
 SINGLE_DEBOUNCE_SECS = 3
 GROUP_DEBOUNCE_SECS = 4
 
 # ---------------------------
 # State buffers
 # ---------------------------
+# pending_single: بافر تک‌مدیا بر اساس chat_id
 pending_single: Dict[int, Dict] = {}
+# pending_groups: بافر آلبوم‌ها بر اساس group_id (string)
 pending_groups: Dict[str, Dict] = {}
+# last_group_by_chat: نگهداری آخرین group_id در هر chat برای دریافت کپشنِ جدا
 last_group_by_chat: Dict[int, str] = {}
 
 # ---------------------------
 # Helper functions
 # ---------------------------
 def shorten_caption(text: Optional[str], limit: int) -> str:
+    """کپشن را به اندازه‌ی مجاز کوتاه می‌کند."""
     if not text:
         return ""
     return text[:limit - 3] + "..." if len(text) > limit else text
@@ -54,69 +61,19 @@ def shorten_caption(text: Optional[str], limit: int) -> str:
 def clean_caption(text: Optional[str]) -> str:
     if not text:
         return ""
+    # عبارت ناخواسته رو حذف می‌کنیم
     return text.replace("🤖 Downloaded with @iDownloadersBot", "").strip()
 
-def extract_link_from_caption_or_text(caption: Optional[str], raw_msgs: list) -> Optional[str]:
-    """لینک را از کپشن (هایپرلینک یا متن ساده) یا پیام‌های خام استخراج می‌کند."""
-    if not caption and not raw_msgs:
-        return None
-
-    # ۱. تلاش برای گرفتن از تگ HTML داخل کپشن
-    if caption:
-        match = re.search(r'<a href="([^"]+)">O P E N P O S T ⎋</a>', caption)
-        if match:
-            return match.group(1)
-
-    # ۲. تلاش برای گرفتن از متن ساده داخل کپشن
-    if caption and "O P E N P O S T ⎋" in caption:
-        match = re.search(r'(https?://[^\s]+)', caption)
-        if match:
-            return match.group(1)
-
-    # ۳. تلاش برای گرفتن از پیام‌های خام (raw_msgs)
-    for m in raw_msgs:
-        if not m.text:
-            continue
-        if "O P E N P O S T ⎋" in m.text:
-            match = re.search(r'(https?://[^\s]+)', m.text)
-            if match:
-                return match.group(1)
-
-    return None
-
-def extract_link_from_caption(caption: Optional[str]) -> Optional[str]:
-    """لینک داخل تگ HTML یا متن ساده را از کپشن استخراج می‌کند."""
-    if not caption:
-        return None
-    # اول تلاش برای گرفتن از تگ HTML
-    match = re.search(r'<a href="([^"]+)">O P E N P O S T ⎋</a>', caption)
-    if match:
-        return match.group(1)
-    # اگر فقط متن لینک بود
-    match = re.search(r'(https?://[^\s]+)', caption)
-    return match.group(1) if match else None
-
-def extract_link_from_raw_msgs(raw_msgs: list) -> Optional[str]:
-    """لینک را از پیام‌هایی که شامل O P E N P O S T ⎋ هستند استخراج می‌کند."""
-    for m in raw_msgs:
-        if not m.text:
-            continue
-        if "O P E N P O S T ⎋" in m.text:
-            match = re.search(r"(https?://[^\s]+)", m.text)
-            if match:
-                return match.group(1)
-    return None
-
-def rebuild_caption(caption: str, url: Optional[str]) -> str:
-    """تگ HTML را حذف کرده و کپشن را با لینک بازسازی می‌کند."""
-    cleaned = re.sub(r'<a href="[^"]+">O P E N P O S T ⎋</a>', '', caption).strip()
-    cleaned = shorten_caption(clean_caption(cleaned), MAX_CAPTION)
+def build_caption(base_caption: str, url: Optional[str]) -> str:
+    """کپشن نهایی را با لینک انتهایی می‌سازد."""
+    cleaned = clean_caption(base_caption)   # 👈 اول پاکسازی
+    caption = shorten_caption(cleaned, MAX_CAPTION)  # 👈 روی متن پاک‌شده کوتاه کن
     if url:
-        return f"{cleaned}\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
-    else:
-        return cleaned
-      
+        caption += f"\n\n<a href=\"{url}\">O P E N P O S T ⎋</a>"
+    return caption
+
 def extract_button_url(msg) -> Optional[str]:
+    """اگر دکمه‌ی با URL داخل reply_markup باشد، URL را استخراج می‌کند."""
     if not msg or not msg.reply_markup or not msg.reply_markup.inline_keyboard:
         return None
     for row in msg.reply_markup.inline_keyboard:
@@ -129,24 +86,19 @@ def extract_button_url(msg) -> Optional[str]:
 # Flush operations
 # ---------------------------
 async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """ارسال نهایی تک‌مدیا پس از تکمیل داده‌ها."""
     data = pending_single.pop(chat_id, None)
     if not data:
         log.info(f"⏭ No pending single for chat {chat_id}")
         return
 
-    # 📝 لاگ کپشن دریافتی
-    log.info(f"📝 Raw caption received: {data.get('caption')}")
+    caption_text = data.get("caption") or ""   # 👈 اگر کپشن نبود، رشته خالی
+    caption = build_caption(caption_text, data.get("button_url"))
+    log.info(f"🚀 Flushing single {data['type']} to {chat_id} (caption={'yes' if caption_text else 'no'})")
 
-    # استخراج لینک از دکمه یا کپشن/متن
-    url = extract_button_url(data["raw_msgs"][0])
-    if not url:
-        url = extract_link_from_caption_or_text(data.get("caption") or "", data["raw_msgs"])
 
-    # بازسازی کپشن
-    caption = rebuild_caption(data.get("caption") or "", url)
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
     log.info(f"🚀 Flushing single {data['type']} to {chat_id} | file_id={data['file_id']}")
-    log.info(f"📎 Final caption: {caption}")
-    log.info(f"🔗 Extracted URL: {url}")
 
     try:
         if data["type"] == "photo":
@@ -161,6 +113,7 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.error(f"❌ Failed to send single media to {chat_id}: {e}")
     finally:
+        # تلاش برای پاک کردن پیام‌های خام ورودی
         for m in data.get("raw_msgs", []):
             try:
                 await m.delete()
@@ -169,25 +122,21 @@ async def flush_single(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
                 log.warning(f"⚠️ Could not delete raw message {getattr(m,'message_id',None)} in {chat_id}: {e}")
 
 async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """ارسال نهایی آلبوم پس از تکمیل داده‌ها."""
     data = pending_groups.pop(group_id, None)
     if not data or not data["media"]:
         log.info(f"⏭ No pending media for group {group_id} in chat {chat_id}")
         return
 
-    # 📝 لاگ کپشن دریافتی
-    log.info(f"📝 Raw caption received: {data.get('caption')}")
+    caption_text = data.get("caption") or ""
+    caption = build_caption(caption_text, data.get("button_url"))
+    log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id} (caption={'yes' if caption_text else 'no'})")
 
-    # استخراج لینک از دکمه یا کپشن/متن
-    url = extract_button_url(data["raw_msgs"][0])
-    if not url:
-        url = extract_link_from_caption_or_text(data.get("caption") or "", data["raw_msgs"])
 
-    # بازسازی کپشن
-    caption = rebuild_caption(data.get("caption") or "", url)
+    caption = build_caption(data.get("caption") or "", data.get("button_url"))
     log.info(f"🚀 Flushing media group {group_id} ({len(data['media'])} items) to {chat_id}")
-    log.info(f"📎 Final caption: {caption}")
-    log.info(f"🔗 Extracted URL: {url}")
 
+    # آیتم اول با کپشن ساخته می‌شود
     first = data["media"][0]
     if isinstance(first, InputMediaPhoto):
         data["media"][0] = InputMediaPhoto(first.media, caption=caption, parse_mode="HTML")
@@ -201,6 +150,7 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
     except Exception as e:
         log.error(f"❌ Failed to send media group {group_id} to {chat_id}: {e}")
     finally:
+        # تلاش برای پاک کردن پیام‌های خام ورودی
         for m in data.get("raw_msgs", []):
             try:
                 await m.delete()
@@ -212,6 +162,7 @@ async def flush_group(group_id: str, chat_id: int, context: ContextTypes.DEFAULT
 # Debounce timers
 # ---------------------------
 async def single_timer_task(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """تایمر برای انتظار کپشنِ تک‌مدیا."""
     log.info(f"⏳ Starting single debounce timer for chat {chat_id} ({SINGLE_DEBOUNCE_SECS}s)")
     try:
         await asyncio.sleep(SINGLE_DEBOUNCE_SECS)
@@ -221,6 +172,7 @@ async def single_timer_task(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     await flush_single(chat_id, context)
 
 async def group_timer_task(group_id: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """تایمر برای انتظار کپشنِ آلبوم."""
     log.info(f"⏳ Starting group debounce timer for {group_id} in chat {chat_id} ({GROUP_DEBOUNCE_SECS}s)")
     try:
         await asyncio.sleep(GROUP_DEBOUNCE_SECS)
@@ -228,6 +180,7 @@ async def group_timer_task(group_id: str, chat_id: int, context: ContextTypes.DE
         log.info(f"⏹ Group debounce timer cancelled for {group_id} in chat {chat_id}")
         return
     await flush_group(group_id, chat_id, context)
+    # پاک کردن اشاره‌ی آخرین گروه این چت اگر همان group_id بود
     if last_group_by_chat.get(chat_id) == group_id:
         last_group_by_chat.pop(chat_id, None)
 
@@ -235,6 +188,7 @@ async def group_timer_task(group_id: str, chat_id: int, context: ContextTypes.DE
 # Main handler
 # ---------------------------
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """هندلر اصلی: پیام‌ها را دریافت و به بافرها اضافه می‌کند، سپس طبق debounce ارسال می‌کند."""
     msg = update.effective_message
     if not msg:
         return
@@ -243,6 +197,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     button_url_in = extract_button_url(msg)
 
     try:
+        # آلبوم (media group)
         if msg.media_group_id:
             group_id = f"group_{msg.media_group_id}"
             log.info(f"📥 Received media group item in chat {chat_id}, group_id={group_id}")
@@ -259,8 +214,10 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
                 log.info(f"➕ New group buffer created for {group_id}")
 
+            # اضافه کردن پیام خام برای حذف پس از ارسال
             grp["raw_msgs"].append(msg)
 
+            # افزودن مدیا
             if msg.photo:
                 fid = msg.photo[-1].file_id
                 grp["media"].append(InputMediaPhoto(fid))
@@ -270,6 +227,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 grp["media"].append(InputMediaVideo(fid))
                 log.info(f"🎞 Added video to group {group_id} | file_id={fid}")
 
+            # ثبت کپشن و لینک
             if msg.caption and not grp["caption"]:
                 grp["caption"] = msg.caption
                 log.info(f"✍️ Caption set for group {group_id}")
@@ -277,8 +235,10 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 grp["button_url"] = button_url_in
                 log.info(f"🔗 Button URL set for group {group_id}")
 
+            # برای دریافت کپشن جدا
             last_group_by_chat[chat_id] = group_id
 
+            # ریست تایمر و شروع مجدد
             if grp["timer"]:
                 grp["timer"].cancel()
                 log.info(f"⏹ Reset group timer for {group_id}")
@@ -290,6 +250,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             media_type = "photo" if msg.photo else "video"
             log.info(f"📥 Received single {media_type} in chat {chat_id}")
 
+            # اگر قبلاً بافر تک‌مدیا داشتیم، اول flush کنیم
             if chat_id in pending_single:
                 t = pending_single[chat_id].get("timer")
                 if t:
@@ -297,6 +258,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     log.info(f"⏹ Cancelled previous single timer in chat {chat_id}")
                 await flush_single(chat_id, context)
 
+            # ساخت بافر جدید
             file_id = msg.photo[-1].file_id if msg.photo else msg.video.file_id
             pending_single[chat_id] = {
                 "file_id": file_id,
@@ -308,6 +270,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
             log.info(f"➕ Added pending single {media_type} in chat {chat_id} | file_id={file_id}")
 
+            # شروع تایمر
             t = asyncio.create_task(single_timer_task(chat_id, context))
             pending_single[chat_id]["timer"] = t
             return
@@ -317,6 +280,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = msg.text
             log.info(f"📥 Received text in chat {chat_id}: {text[:40]}...")
 
+            # اگر تک‌مدیا در انتظار کپشن است
             if chat_id in pending_single:
                 data = pending_single[chat_id]
                 t = data.get("timer")
@@ -331,6 +295,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await flush_single(chat_id, context)
                 return
 
+            # اگر آخرین پیام‌ها مربوط به آلبوم بوده
             group_id = last_group_by_chat.get(chat_id)
             if group_id and group_id in pending_groups:
                 grp = pending_groups[group_id]
@@ -345,6 +310,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
     except Exception as e:
+        # هر خطای غیرمنتظره در جریان handle اینجا لاگ می‌شود
         log.error(f"❌ Handle failed in chat {chat_id}: {e}")
 
 # ---------------------------
