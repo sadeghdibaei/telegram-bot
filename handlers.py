@@ -13,12 +13,14 @@ def register_handlers(app: Client):
     @app.on_message(filters.private & filters.user(IDOWNLOADER_BOT))
     async def handle_bot_response(client: Client, message: Message):
         try:
-            chat_id = message.chat.id
-            group_id = chat_id  # فرض بر اینه که group_id همونه
+            group_id = next(iter(last_instagram_link), None)
+            if not group_id:
+                print("⚠️ No group_id found in last_instagram_link")
+                return
 
-            print(f"📩 Message from iDownloadersBot | chat_id={chat_id}")
+            print(f"📩 Message from iDownloadersBot | group_id={group_id}")
 
-            # 📸 فقط مدیا رو بافر کن — کپشن رو نادیده بگیر
+            # 📸 فقط مدیا رو بافر کن
             if message.video:
                 media_buffer.append(InputMediaVideo(media=message.video.file_id))
                 print("📥 Buffered video")
