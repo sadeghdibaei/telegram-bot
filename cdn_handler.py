@@ -10,12 +10,8 @@ from utils import build_final_caption
 def register_handlers(app: Client):
     @app.on_message(filters.private & filters.user(URLUPLOAD_BOT))
     async def handle_cdn_link(client: Client, message: Message):
-        """
-        📦 Handles messages from @urluploadxbot and clicks 'Default' button to trigger media delivery.
-        """
         try:
             for group_id, state in upload_state.items():
-                # 🖱️ Click 'Default' button if present
                 if message.reply_markup:
                     for row in message.reply_markup.inline_keyboard:
                         for i, btn in enumerate(row):
@@ -24,7 +20,6 @@ def register_handlers(app: Client):
                                 print(f"✅ Clicked 'Default' button: {btn.text}")
                                 return
 
-                # 📸 Extract final media
                 if message.video:
                     media = InputMediaVideo(media=message.video.file_id)
                 elif message.document and message.document.mime_type.startswith("video/"):
@@ -35,7 +30,6 @@ def register_handlers(app: Client):
                     print("⚠️ No valid media found in CDN response")
                     return
 
-                # 📤 Send media + caption to group
                 media_buffer.append(media)
                 caption = build_final_caption(state["link"], state["caption"])
                 await client.send_media_group(group_id, media=[media])
