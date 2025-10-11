@@ -64,10 +64,8 @@ def register_handlers(app: Client):
             # Buffer media
             if message.photo:
                 media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
-                print("📥 Buffered photo (PV)")
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
-                print("📥 Buffered video (PV)")
 
             # If caption present, build final caption and flush
             if message.caption or message.text:
@@ -101,10 +99,8 @@ def register_handlers(app: Client):
             # Buffer media
             if message.photo:
                 media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
-                print("📥 Buffered photo (Group)")
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
-                print("📥 Buffered video (Group)")
 
             # If caption present, build final caption and flush
             if message.caption or message.text:
@@ -121,7 +117,6 @@ def register_handlers(app: Client):
             # Delete raw bot message in group
             try:
                 await message.delete()
-                print("🗑️ Deleted raw iDownloadersBot message from group")
             except Exception:
                 pass
 
@@ -153,10 +148,8 @@ def register_handlers(app: Client):
             # Buffer media
             if message.photo:
                 media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
-                print("📥 Buffered photo (PV)")
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
-                print("📥 Buffered video (PV)")
 
             # If caption present, build final caption and flush
             if message.caption:
@@ -190,10 +183,8 @@ def register_handlers(app: Client):
             # Buffer media
             if message.photo:
                 media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
-                print("📥 Buffered photo (Group)")
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
-                print("📥 Buffered video (Group)")
 
             # If caption present, build final caption and flush
             if message.caption:
@@ -210,7 +201,6 @@ def register_handlers(app: Client):
             # Delete raw bot message in group
             try:
                 await message.delete()
-                print("🗑️ Deleted raw Multi_Media_Downloader_bot message from group")
             except Exception:
                 pass
 
