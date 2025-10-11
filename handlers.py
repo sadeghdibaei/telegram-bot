@@ -10,6 +10,9 @@ from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT, MULTI_MEDIA_BOT
 from state import media_buffer, pending_caption, last_instagram_link, got_response, captions_buffer
 from utils import build_final_caption, clean_caption
 
+# ✅ جدید: برای جلوگیری از duplicate
+media_seen = {}  # group_id -> set of file_unique_id
+
 
 async def send_album_with_caption(client: Client, group_id: int, caption: str):
     """
@@ -39,6 +42,7 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     # Clear state
     media_buffer[group_id] = []
     captions_buffer[group_id] = []
+    media_seen[group_id] = set()
     pending_caption.pop(group_id, None)
 
 
@@ -88,6 +92,32 @@ def collect_caption(client: Client, group_id: int, raw_caption: str):
     schedule_flush(client, group_id)
 
 
+def buffer_media(group_id: int, message: Message, source: str):
+    """
+    Buffer media with deduplication using file_unique_id.
+    """
+    media_buffer.setdefault(group_id, [])
+    media_seen.setdefault(group_id, set())
+
+    if message.photo:
+        uid = message.photo.file_unique_id
+        if uid not in media_seen[group_id]:
+            media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
+            media_seen[group_id].add(uid)
+            print(f"📩 Buffered PHOTO ({source}) for group {group_id}")
+        else:
+            print(f"⚠️ Skipped duplicate PHOTO ({source}) for group {group_id}")
+
+    elif message.video:
+        uid = message.video.file_unique_id
+        if uid not in media_seen[group_id]:
+            media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
+            media_seen[group_id].add(uid)
+            print(f"📩 Buffered VIDEO ({source}) for group {group_id}")
+        else:
+            print(f"⚠️ Skipped duplicate VIDEO ({source}) for group {group_id}")
+
+
 def register_handlers(app: Client):
 
     # -------------------------
@@ -102,19 +132,11 @@ def register_handlers(app: Client):
                 return
             got_response[group_id] = True
 
-            media_buffer.setdefault(group_id, [])
-
-            if message.photo:
-                media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
-                print(f"📩 Buffered PHOTO from iDownloader for group {group_id}")
-            elif message.video:
-                media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
-                print(f"📩 Buffered VIDEO from iDownloader for group {group_id}")
+            buffer_media(group_id, message, "iDownloader PV")
 
             if message.caption or message.text:
                 collect_caption(client, group_id, message.caption or message.text)
             else:
-                # No caption → still schedule flush
                 schedule_flush(client, group_id)
 
         except Exception as e:
@@ -127,14 +149,7 @@ def register_handlers(app: Client):
             group_id = message.chat.id
             got_response[group_id] = True
 
-            media_buffer.setdefault(group_id, [])
-
-            if message.photo:
-                media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
-                print(f"📩 Buffered PHOTO from iDownloader (group) {group_id}")
-            elif message.video:
-                media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
-                print(f"📩 Buffered VIDEO from iDownloader (group) {group_id}")
+            buffer_media(group_id, message, "iDownloader Group")
 
             if message.caption or message.text:
                 collect_caption(client, group_id, message.caption or message.text)
@@ -163,14 +178,7 @@ def register_handlers(app: Client):
                 return
             got_response[group_id] = True
 
-            media_buffer.setdefault(group_id, [])
-
-            if message.photo:
-                media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
-                print(f"📩 Buffered PHOTO from MultiMedia for group {group_id}")
-            elif message.video:
-                media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
-                print(f"📩 Buffered VIDEO from MultiMedia for group {group_id}")
+            buffer_media(group_id, message, "MultiMedia PV")
 
             if message.caption or message.text:
                 collect_caption(client, group_id, message.caption or message.text)
