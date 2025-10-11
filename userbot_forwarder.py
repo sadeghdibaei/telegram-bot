@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 
 from config import INSTAGRAM_REGEX, IDOWNLOADER_BOT, MULTI_MEDIA_BOT, MAX_MEDIA_PER_GROUP
-from state import media_buffer, pending_caption, last_instagram_link
+from state import media_buffer, pending_caption, last_instagram_link, got_response
 from utils import build_final_caption
 
 # ✅ Define Pyrogram client using environment variables
