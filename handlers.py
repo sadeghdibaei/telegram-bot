@@ -1,13 +1,12 @@
 # 📦 Handles responses from iDownloadersBot & Multi_Media_Downloader_bot
-# -----------------------------------------
+# ----------------------------------------------------------------------
 # Unified logic:
-#   - Always buffer incoming media (photo/video).
-#   - Collect all captions (separate or attached).
-#   - Clean signatures and deduplicate captions.
+#   - Buffer media per group_id (photo/video).
+#   - Collect all captions (clean + dedup).
 #   - Flush after short delay: send album + single final caption.
 #   - In private chats: do NOT delete bot messages.
 #   - In groups: delete raw bot messages after processing.
-# -----------------------------------------
+# ----------------------------------------------------------------------
 
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
@@ -23,8 +22,12 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     """
     Flush the buffered media as an album, then send the caption separately.
     """
+    if group_id not in media_buffer or not media_buffer[group_id]:
+        return
+
     # Split media into chunks (Telegram max 10 per album)
-    chunks = [media_buffer[i:i + MAX_MEDIA_PER_GROUP] for i in range(0, len(media_buffer), MAX_MEDIA_PER_GROUP)]
+    chunks = [media_buffer[group_id][i:i + MAX_MEDIA_PER_GROUP]
+              for i in range(0, len(media_buffer[group_id]), MAX_MEDIA_PER_GROUP)]
     for index, chunk in enumerate(chunks):
         await client.send_media_group(group_id, media=chunk)
         print(f"📤 Sent media group chunk {index + 1}/{len(chunks)}")
@@ -34,7 +37,7 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     print("📝 Sent caption with link")
 
     # Clear state
-    media_buffer.clear()
+    media_buffer[group_id] = []
     captions_buffer[group_id] = []
     pending_caption.pop(group_id, None)
 
@@ -63,7 +66,7 @@ def collect_caption_and_schedule_flush(client: Client, group_id: int, raw_captio
 
     async def delayed_flush():
         await asyncio.sleep(2)  # wait for all media
-        if media_buffer:
+        if media_buffer.get(group_id):
             link = last_instagram_link.get(group_id, "")
             # pick the longest caption (usually the most complete)
             best_caption = max(captions_buffer[group_id], key=len) if captions_buffer[group_id] else ""
@@ -87,11 +90,13 @@ def register_handlers(app: Client):
                 return
             got_response[group_id] = True
 
-            # Buffer media
+            # Buffer media per group
+            if group_id not in media_buffer:
+                media_buffer[group_id] = []
             if message.photo:
-                media_buffer.append(InputMediaPhoto(message.photo.file_id))
+                media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
-                media_buffer.append(InputMediaVideo(message.video.file_id))
+                media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
 
             # Collect caption if present
             if message.caption or message.text:
@@ -107,11 +112,13 @@ def register_handlers(app: Client):
             group_id = message.chat.id
             got_response[group_id] = True
 
-            # Buffer media
+            # Buffer media per group
+            if group_id not in media_buffer:
+                media_buffer[group_id] = []
             if message.photo:
-                media_buffer.append(InputMediaPhoto(message.photo.file_id))
+                media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
-                media_buffer.append(InputMediaVideo(message.video.file_id))
+                media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
 
             # Collect caption if present
             if message.caption or message.text:
@@ -139,18 +146,19 @@ def register_handlers(app: Client):
             if not group_id:
                 return
             got_response[group_id] = True
-    
-            # ✅ Always buffer media
+
+            # Buffer media per group
+            if group_id not in media_buffer:
+                media_buffer[group_id] = []
             if message.photo:
-                media_buffer.append(InputMediaPhoto(message.photo.file_id))
+                media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
-                media_buffer.append(InputMediaVideo(message.video.file_id))
-    
-            # ✅ If caption exists, collect it separately
+                media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
+
+            # Collect caption if present
             if message.caption:
                 collect_caption_and_schedule_flush(client, group_id, message.caption)
-    
+
         except Exception as e:
             print("❌ Error handling Multi_Media PV:", e)
             traceback.print_exc()
-    
