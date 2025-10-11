@@ -27,28 +27,16 @@ def clean_caption(text: str) -> str:
 
 
 def build_final_caption(link: str, original_caption: str = "") -> str:
-    from utils import clean_caption  # use existing cleaner if defined elsewhere
+    from utils import clean_caption  # اگر clean_caption جای دیگه تعریف شده
 
     cleaned = clean_caption(original_caption)
     if not link:
         print("⚠️ Empty link passed to build_final_caption")
         return cleaned or "⚠️ No link available"
 
-    # Build escaped link text (Telegram won't auto-hyperlink it)
+    # متن لینک به صورت escape شده (تلگرام دیگه هایپرلینک نمی‌کنه)
     raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
     escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
 
-    # Telegram caption limit when attached to media
-    MAX_CAPTION_LEN = 1024
-    reserved = len("\n\n" + escaped) if cleaned else len(escaped)
-    allowed = MAX_CAPTION_LEN - reserved
-
-    # Truncate caption if too long
-    if cleaned and len(cleaned) > allowed:
-        if allowed > 3:
-            cleaned = cleaned[:allowed - 3] + "..."
-        else:
-            cleaned = ""
-
-    # Final caption: cleaned text + escaped link
+    # کپشن نهایی: متن تمیز + متن escape شده
     return f"{cleaned}\n\n{escaped}" if cleaned else escaped
