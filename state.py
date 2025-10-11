@@ -1,14 +1,18 @@
 # 🧠 Shared state across handlers
-# All state is per-group to avoid cross-talk between groups.
+# ----------------------------------------------------------------------
+# All states are stored per group_id to avoid cross-talk between groups
 
 # 📥 group_id -> list of InputMedia (photos/videos) buffered before sending as album
-media_buffer = {}  # CHANGED from list to dict
+media_buffer = {}
+
+# ✅ group_id -> set of file_unique_id (to prevent duplicate media)
+media_seen = {}
 
 # ⏱️ group_id -> asyncio.Task for delayed flush (caption + album)
 pending_caption = {}
 
 # 📦 group_id -> {step, link, caption}
-# Optional: track upload progress or debug flow
+# Optional: can be used for debugging or tracking upload progress
 upload_state = {}
 
 # 🔗 group_id -> original Instagram link
@@ -20,5 +24,5 @@ got_response = {}
 # 📝 group_id -> list of unique cleaned captions (for deduplication)
 captions_buffer = {}
 
-# 🕒 group_id -> timestamp of last request sent to iDownloadersBot (for 30s cooldown)
+# 🕒 group_id -> timestamp of last request sent to iDownloadersBot (for cooldown control)
 last_idownloader_request = {}
