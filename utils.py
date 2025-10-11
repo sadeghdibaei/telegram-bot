@@ -27,31 +27,24 @@ def clean_caption(text: str) -> str:
 
 
 def build_final_caption(link: str, original_caption: str = "") -> str:
-    """
-    Build final caption for media attachment.
-    Rules:
-    - Telegram media caption limit: 1024 chars.
-    - Reserve 21 chars for: "..." (3) + newline (1) + "O P E N P O S T ⎋" (17).
-    - If caption exceeds 1003 chars, truncate and append "...".
-    - Final output ends with a newline + "O P E N P O S T ⎋".
-    - The downstream bot will convert "O P E N P O S T ⎋" into a hyperlink.
-    """
-    from utils import clean_caption
+    from utils import clean_caption  # اگر clean_caption جای دیگه تعریف شده
 
-    LINK_TEXT = "O P E N P O S T ⎋"
+    cleaned = clean_caption(original_caption)
+    if not link:
+        print("⚠️ Empty link passed to build_final_caption")
+        return cleaned or "⚠️ No link available"
+
+    # متن لینک به صورت escape شده (تلگرام دیگه هایپرلینک نمی‌کنه)
+    raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+    escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
+
+    # محدودیت کپشن: 1024 - 21 = 1003 کاراکتر
     MAX_MEDIA_CAPTION = 1024
-    RESERVED = 21  # 3 ("...") + 1 (newline) + 17 (LINK_TEXT)
+    RESERVED = 21
     ALLOWED = MAX_MEDIA_CAPTION - RESERVED  # 1003
 
-    cleaned = clean_caption(original_caption) or ""
-
-    # Truncate if needed, keeping room for "..." + newline + LINK_TEXT
-    if len(cleaned) > ALLOWED:
+    if cleaned and len(cleaned) > ALLOWED:
         cleaned = cleaned[:ALLOWED] + "..."
 
-    # If no caption, just LINK_TEXT
-    if not cleaned:
-        return LINK_TEXT
-
-    # Single newline before link (counts as 1 char in RESERVED)
-    return f"{cleaned}\n{LINK_TEXT}"
+    # کپشن نهایی: متن تمیز + متن escape شده
+    return f"{cleaned}\n\n{escaped}" if cleaned else escaped
