@@ -126,37 +126,40 @@ def register_handlers(app: Client):
             if not group_id:
                 print("⚠️ No group_id found for Multi_Media_Downloader_bot")
                 return
-
+    
             print(f"📩 Message from Multi_Media_Downloader_bot | group_id={group_id}")
-
-            # 📸 مدیا + کپشن با هم میاد
+    
+            # 📸 اگر مدیا باشه → بافر کن
             if message.photo:
-                media = InputMediaPhoto(message.photo[-1].file_id)
+                media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
+                print("📥 Buffered photo")
             elif message.video:
-                media = InputMediaVideo(message.video.file_id)
+                media_buffer.append(InputMediaVideo(message.video.file_id))
+                print("📥 Buffered video")
             else:
                 print("⚠️ Unsupported media type")
                 return
-
-            # کپشن رو پاکسازی کن
-            cleaned = clean_caption(message.caption or "")
-            link = last_instagram_link.get(group_id, "")
-            final_caption = build_final_caption(link, cleaned)
-
-            # ارسال مدیا با کپشن نهایی
-            if isinstance(media, InputMediaPhoto):
-                await client.send_photo(group_id, media.media, caption=final_caption, parse_mode="HTML")
-            else:
-                await client.send_video(group_id, media.media, caption=final_caption, parse_mode="HTML")
-
-            print("✅ Sent media with cleaned caption from Multi_Media_Downloader_bot")
-
+    
+            # 📝 اگر کپشن داشت → کپشن نهایی رو بساز
+            if message.caption:
+                cleaned = clean_caption(message.caption)
+                link = last_instagram_link.get(group_id, "")
+                final_caption = build_final_caption(link, cleaned)
+    
+                # بعد از 1 ثانیه همه‌ی مدیاها رو با کپشن جدا بفرست
+                async def flush():
+                    await asyncio.sleep(1)
+                    if media_buffer:
+                        await send_album_with_caption(client, group_id, final_caption)
+                asyncio.create_task(flush())
+    
             # پاک کردن پیام خام
             try:
                 await message.delete()
             except Exception:
                 pass
-
+    
         except Exception as e:
             print("❌ Error handling Multi_Media_Downloader_bot response:", e)
             traceback.print_exc()
+    
