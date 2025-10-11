@@ -37,20 +37,23 @@ async def handle_instagram_link(client: Client, message: Message):
 
             # اولویت: iDownloadersBot
             await client.send_message(IDOWNLOADER_BOT, link)
-            print("📤 Sent link to iDownloadersBot")
+            print(f"📤 Sent link to iDownloadersBot | group_id={group_id}")
+            print("⏳ Waiting up to 10s for iDownloadersBot response...")
 
-            # ⏳ اگر بعد از 10 ثانیه جوابی نیومد → fallback به Multi_Media_Downloader_bot
+            # ⏳ اگر بعد از 3 ثانیه جوابی نیومد → fallback به Multi_Media_Downloader_bot
             async def fallback():
-                await asyncio.sleep(10)
+                await asyncio.sleep(3)
                 if not media_buffer:
                     await client.send_message(MULTI_MEDIA_BOT, link)
-                    print("↩️ Fallback to Multi_Media_Downloader_bot")
+                    print(f"↩️ No response from iDownloadersBot, fallback triggered → sent to Multi_Media_Downloader_bot | group_id={group_id}")
+                else:
+                    print(f"✅ Response received from iDownloadersBot within timeout | group_id={group_id}")
 
             asyncio.create_task(fallback())
 
             # پاک کردن پیام اصلی کاربر
             await message.delete()
-            print("🗑️ Deleted original message")
+            print("🗑️ Deleted original message from group")
 
         except Exception as e:
             print("❌ Error sending to bot:", e)
