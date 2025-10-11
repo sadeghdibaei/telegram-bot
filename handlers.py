@@ -89,7 +89,7 @@ def register_handlers(app: Client):
 
             # Buffer media
             if message.photo:
-                media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
+                media_buffer.append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
@@ -109,7 +109,7 @@ def register_handlers(app: Client):
 
             # Buffer media
             if message.photo:
-                media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
+                media_buffer.append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
@@ -142,7 +142,7 @@ def register_handlers(app: Client):
 
             # Buffer media
             if message.photo:
-                media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
+                media_buffer.append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
@@ -162,7 +162,7 @@ def register_handlers(app: Client):
 
             # Buffer media
             if message.photo:
-                media_buffer.append(InputMediaPhoto(message.photo[-1].file_id))
+                media_buffer.append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
