@@ -7,11 +7,8 @@ import asyncio
 import traceback
 
 from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT, MULTI_MEDIA_BOT
-from state import media_buffer, pending_caption, last_instagram_link, got_response, captions_buffer
+from state import media_buffer, media_seen, pending_caption, last_instagram_link, got_response, captions_buffer
 from utils import build_final_caption, clean_caption
-
-# ✅ جدید: برای جلوگیری از duplicate
-media_seen = {}  # group_id -> set of file_unique_id
 
 
 async def send_album_with_caption(client: Client, group_id: int, caption: str):
