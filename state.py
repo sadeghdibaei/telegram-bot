@@ -18,3 +18,6 @@ got_response = {}
 
 # 📝 group_id → list of unique cleaned captions (for deduplication)
 captions_buffer = {}
+
+# 🕒 group_id → timestamp of last request sent to iDownloadersBot
+last_idownloader_request = {}
