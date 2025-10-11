@@ -7,7 +7,7 @@ import traceback
 
 from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT, MULTI_MEDIA_BOT
 from state import media_buffer, pending_caption, last_instagram_link
-from utils import build_final_caption, clean_captio
+from utils import build_final_caption, clean_caption
 
 def extract_button_url(message: Message) -> str | None:
     rm = getattr(message, "reply_markup", None)
