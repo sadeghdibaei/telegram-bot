@@ -1,7 +1,7 @@
 # 📦 Handles responses from iDownloadersBot & Multi_Media_Downloader_bot
 # ----------------------------------------------------------------------
 # Unified logic:
-#   - Buffer media per group_id (photo/video).
+#   - Buffer media per group_id (photo/video/animation).
 #   - Collect all captions (clean + dedup).
 #   - Flush after short delay: send album + single final caption.
 #   - In private chats: do NOT delete bot messages.
@@ -9,7 +9,7 @@
 # ----------------------------------------------------------------------
 
 from pyrogram import Client, filters
-from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
+from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo, InputMediaAnimation
 import asyncio
 import traceback
 
@@ -91,12 +91,13 @@ def register_handlers(app: Client):
             got_response[group_id] = True
 
             # Buffer media per group
-            if group_id not in media_buffer:
-                media_buffer[group_id] = []
+            media_buffer.setdefault(group_id, [])
             if message.photo:
                 media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
+            elif message.animation:  # ✅ handle GIFs
+                media_buffer[group_id].append(InputMediaAnimation(message.animation.file_id))
 
             # Collect caption if present
             if message.caption or message.text:
@@ -113,12 +114,13 @@ def register_handlers(app: Client):
             got_response[group_id] = True
 
             # Buffer media per group
-            if group_id not in media_buffer:
-                media_buffer[group_id] = []
+            media_buffer.setdefault(group_id, [])
             if message.photo:
                 media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
+            elif message.animation:  # ✅ handle GIFs
+                media_buffer[group_id].append(InputMediaAnimation(message.animation.file_id))
 
             # Collect caption if present
             if message.caption or message.text:
@@ -148,12 +150,13 @@ def register_handlers(app: Client):
             got_response[group_id] = True
 
             # Buffer media per group
-            if group_id not in media_buffer:
-                media_buffer[group_id] = []
+            media_buffer.setdefault(group_id, [])
             if message.photo:
                 media_buffer[group_id].append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
+            elif message.animation:  # ✅ handle GIFs
+                media_buffer[group_id].append(InputMediaAnimation(message.animation.file_id))
 
             # Collect caption if present
             if message.caption:
