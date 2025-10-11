@@ -5,9 +5,9 @@ from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 import asyncio
 import traceback
 
-from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT
+from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT, MULTI_MEDIA_BOT
 from state import media_buffer, pending_caption, last_instagram_link
-from utils import build_final_caption
+from utils import build_final_caption, clean_captio
 
 def extract_button_url(message: Message) -> str | None:
     rm = getattr(message, "reply_markup", None)
@@ -119,3 +119,44 @@ def register_handlers(app: Client):
                 await message.delete()
             except Exception:
                 pass
+    @app.on_message(filters.private & filters.user(MULTI_MEDIA_BOT))
+    async def handle_multimedia_response(client: Client, message: Message):
+        try:
+            group_id = next(iter(last_instagram_link), None)
+            if not group_id:
+                print("⚠️ No group_id found for Multi_Media_Downloader_bot")
+                return
+
+            print(f"📩 Message from Multi_Media_Downloader_bot | group_id={group_id}")
+
+            # 📸 مدیا + کپشن با هم میاد
+            if message.photo:
+                media = InputMediaPhoto(message.photo[-1].file_id)
+            elif message.video:
+                media = InputMediaVideo(message.video.file_id)
+            else:
+                print("⚠️ Unsupported media type")
+                return
+
+            # کپشن رو پاکسازی کن
+            cleaned = clean_caption(message.caption or "")
+            link = last_instagram_link.get(group_id, "")
+            final_caption = build_final_caption(link, cleaned)
+
+            # ارسال مدیا با کپشن نهایی
+            if isinstance(media, InputMediaPhoto):
+                await client.send_photo(group_id, media.media, caption=final_caption, parse_mode="HTML")
+            else:
+                await client.send_video(group_id, media.media, caption=final_caption, parse_mode="HTML")
+
+            print("✅ Sent media with cleaned caption from Multi_Media_Downloader_bot")
+
+            # پاک کردن پیام خام
+            try:
+                await message.delete()
+            except Exception:
+                pass
+
+        except Exception as e:
+            print("❌ Error handling Multi_Media_Downloader_bot response:", e)
+            traceback.print_exc()
