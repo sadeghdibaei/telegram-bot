@@ -4,6 +4,7 @@ import re
 
 # 🤖 Bot usernames
 IDOWNLOADER_BOT = "iDownloadersBot"
+MULTI_MEDIA_BOT = "Multi_Media_Downloader_bot"
 URLUPLOAD_BOT = "urluploadxbot"
 
 # 🔍 Regex pattern to detect Instagram links
