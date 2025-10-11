@@ -1,10 +1,8 @@
 # 📦 Handles responses from iDownloadersBot & Multi_Media_Downloader_bot
 # ----------------------------------------------------------------------
-# Debug version: with detailed logging
-# ----------------------------------------------------------------------
 
 from pyrogram import Client, filters
-from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo, InputMediaAnimation
+from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 import asyncio
 import traceback
 
@@ -27,8 +25,11 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     chunks = [media_buffer[group_id][i:i + MAX_MEDIA_PER_GROUP]
               for i in range(0, len(media_buffer[group_id]), MAX_MEDIA_PER_GROUP)]
     for index, chunk in enumerate(chunks):
-        await client.send_media_group(group_id, media=chunk)
-        print(f"✅ Sent media group chunk {index + 1}/{len(chunks)}")
+        try:
+            await client.send_media_group(group_id, media=chunk)
+            print(f"✅ Sent media group chunk {index + 1}/{len(chunks)}")
+        except Exception as e:
+            print(f"❌ Failed to send media group chunk {index + 1}: {e}")
 
     # Send caption separately
     if caption:
@@ -41,9 +42,37 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     pending_caption.pop(group_id, None)
 
 
-def collect_caption_and_schedule_flush(client: Client, group_id: int, raw_caption: str):
+def schedule_flush(client: Client, group_id: int):
     """
-    Collect caption (clean + dedup), then schedule delayed flush.
+    Schedule flush with dynamic delay depending on media count.
+    """
+    # Cancel previous pending flush if exists
+    if group_id in pending_caption:
+        try:
+            pending_caption[group_id].cancel()
+        except Exception:
+            pass
+
+    async def delayed_flush():
+        # Dynamic delay: longer if album
+        delay = 2
+        if len(media_buffer.get(group_id, [])) > 1:
+            delay = 5
+        await asyncio.sleep(delay)
+
+        if media_buffer.get(group_id):
+            link = last_instagram_link.get(group_id, "")
+            best_caption = max(captions_buffer[group_id], key=len) if captions_buffer.get(group_id) else ""
+            final_caption = build_final_caption(link, best_caption)
+            print(f"🚀 Triggering flush for group {group_id} with {len(media_buffer[group_id])} media")
+            await send_album_with_caption(client, group_id, final_caption)
+
+    pending_caption[group_id] = asyncio.create_task(delayed_flush())
+
+
+def collect_caption(client: Client, group_id: int, raw_caption: str):
+    """
+    Collect caption (clean + dedup).
     """
     cleaned = clean_caption(raw_caption)
     if not cleaned:
@@ -55,27 +84,8 @@ def collect_caption_and_schedule_flush(client: Client, group_id: int, raw_captio
         captions_buffer[group_id].append(cleaned)
         print(f"📝 Collected caption for group {group_id}: {cleaned[:60]}")
 
-    # Cancel previous pending flush if exists
-    if group_id in pending_caption:
-        try:
-            pending_caption[group_id].cancel()
-            print(f"⏹️ Cancelled previous flush for group {group_id}")
-        except Exception:
-            pass
-
-    async def delayed_flush():
-        print(f"⏳ Waiting before flush for group {group_id}...")
-        await asyncio.sleep(2)  # wait for all media
-        if media_buffer.get(group_id):
-            link = last_instagram_link.get(group_id, "")
-            best_caption = max(captions_buffer[group_id], key=len) if captions_buffer[group_id] else ""
-            final_caption = build_final_caption(link, best_caption)
-            print(f"🚀 Triggering flush for group {group_id} with {len(media_buffer[group_id])} media")
-            await send_album_with_caption(client, group_id, final_caption)
-        else:
-            print(f"⚠️ Flush skipped: no media buffered for group {group_id}")
-
-    pending_caption[group_id] = asyncio.create_task(delayed_flush())
+    # Reschedule flush with updated caption
+    schedule_flush(client, group_id)
 
 
 def register_handlers(app: Client):
@@ -89,7 +99,6 @@ def register_handlers(app: Client):
         try:
             group_id = next(iter(last_instagram_link), None)
             if not group_id:
-                print("⚠️ No group_id found in last_instagram_link")
                 return
             got_response[group_id] = True
 
@@ -101,14 +110,12 @@ def register_handlers(app: Client):
             elif message.video:
                 media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
                 print(f"📩 Buffered VIDEO from iDownloader for group {group_id}")
-            elif message.animation:
-                media_buffer[group_id].append(InputMediaAnimation(message.animation.file_id))
-                print(f"📩 Buffered GIF from iDownloader for group {group_id}")
-            else:
-                print(f"⚠️ Unhandled message type from iDownloader: {message}")
 
             if message.caption or message.text:
-                collect_caption_and_schedule_flush(client, group_id, message.caption or message.text)
+                collect_caption(client, group_id, message.caption or message.text)
+            else:
+                # No caption → still schedule flush
+                schedule_flush(client, group_id)
 
         except Exception as e:
             print("❌ Error handling iDownloadersBot PV:", e)
@@ -128,14 +135,11 @@ def register_handlers(app: Client):
             elif message.video:
                 media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
                 print(f"📩 Buffered VIDEO from iDownloader (group) {group_id}")
-            elif message.animation:
-                media_buffer[group_id].append(InputMediaAnimation(message.animation.file_id))
-                print(f"📩 Buffered GIF from iDownloader (group) {group_id}")
-            else:
-                print(f"⚠️ Unhandled message type from iDownloader group: {message}")
 
             if message.caption or message.text:
-                collect_caption_and_schedule_flush(client, group_id, message.caption or message.text)
+                collect_caption(client, group_id, message.caption or message.text)
+            else:
+                schedule_flush(client, group_id)
 
             try:
                 await message.delete()
@@ -156,7 +160,6 @@ def register_handlers(app: Client):
         try:
             group_id = next(iter(last_instagram_link), None)
             if not group_id:
-                print("⚠️ No group_id found in last_instagram_link")
                 return
             got_response[group_id] = True
 
@@ -168,14 +171,11 @@ def register_handlers(app: Client):
             elif message.video:
                 media_buffer[group_id].append(InputMediaVideo(message.video.file_id))
                 print(f"📩 Buffered VIDEO from MultiMedia for group {group_id}")
-            elif message.animation:
-                media_buffer[group_id].append(InputMediaAnimation(message.animation.file_id))
-                print(f"📩 Buffered GIF from MultiMedia for group {group_id}")
-            else:
-                print(f"⚠️ Unhandled message type from MultiMedia: {message}")
 
-            if message.caption:
-                collect_caption_and_schedule_flush(client, group_id, message.caption)
+            if message.caption or message.text:
+                collect_caption(client, group_id, message.caption or message.text)
+            else:
+                schedule_flush(client, group_id)
 
         except Exception as e:
             print("❌ Error handling Multi_Media PV:", e)
