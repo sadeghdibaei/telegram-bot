@@ -39,7 +39,7 @@ def build_final_caption(link: str, original_caption: str = "") -> str:
     escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
 
     # سقف امن برای کپشن چسبیده به مدیا (مارجین زیر سقف تلگرام)
-    SAFE_CAP = 1000  # به‌جای 1024 برای اطمینان
+    SAFE_CAP = 800  # به‌جای 1024 برای اطمینان
     RESERVED = 21    # "..."(3) + newline(1) + "O P E N P O S T ⎋"(17)
     ALLOWED = SAFE_CAP - RESERVED  # 979
 
