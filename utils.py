@@ -26,25 +26,29 @@ def clean_caption(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def build_final_caption(link: str, caption: str) -> str:
-    """
-    Build final caption with safe length and mandatory link.
-    - Telegram caption limit when attached to media is 1024 chars.
-    - If caption is too long, truncate and add "..."
-    - Always append the link part at the end.
-    """
-    # Always add the link at the end
-    link_part = f'\n\n<a href="{link}">O P E N P O S T ⎋</a>' if link else ""
+def build_final_caption(link: str, original_caption: str = "") -> str:
+    from utils import clean_caption  # use existing cleaner if defined elsewhere
+
+    cleaned = clean_caption(original_caption)
+    if not link:
+        print("⚠️ Empty link passed to build_final_caption")
+        return cleaned or "⚠️ No link available"
+
+    # Build escaped link text (Telegram won't auto-hyperlink it)
+    raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+    escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
 
     # Telegram caption limit when attached to media
     MAX_CAPTION_LEN = 1024
-
-    # Reserve space for link part
-    reserved = len(link_part)
+    reserved = len("\n\n" + escaped) if cleaned else len(escaped)
     allowed = MAX_CAPTION_LEN - reserved
 
-    # If caption is too long, truncate and add "..."
-    if len(caption) > allowed:
-        caption = caption[:allowed - 3] + "..."
+    # Truncate caption if too long
+    if cleaned and len(cleaned) > allowed:
+        if allowed > 3:
+            cleaned = cleaned[:allowed - 3] + "..."
+        else:
+            cleaned = ""
 
-    return f"{caption}{link_part}"
+    # Final caption: cleaned text + escaped link
+    return f"{cleaned}\n\n{escaped}" if cleaned else escaped
