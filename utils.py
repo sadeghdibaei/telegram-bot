@@ -27,13 +27,16 @@ def clean_caption(text: str) -> str:
 
 
 def build_final_caption(link: str, original_caption: str = "") -> str:
+    from utils import clean_caption  # اگر clean_caption جای دیگه تعریف شده
+
     cleaned = clean_caption(original_caption)
     if not link:
         print("⚠️ Empty link passed to build_final_caption")
         return cleaned or "⚠️ No link available"
 
-    # Build anchor (Telegram supports <a href="...">)
-    anchor = f'<a href="{link}">O P E N P O S T ⎋</a>'
+    # متن لینک به صورت escape شده (تلگرام دیگه هایپرلینک نمی‌کنه)
+    raw_html = f'<a href="{link}">O P E N P O S T ⎋</a>'
+    escaped = raw_html.replace("<", "&lt;").replace(">", "&gt;")
 
-    # Caption: cleaned text + anchor block
-    return f"{cleaned}\n\n{anchor}" if cleaned else anchor
+    # کپشن نهایی: متن تمیز + متن escape شده
+    return f"{cleaned}\n\n{escaped}" if cleaned else escaped
