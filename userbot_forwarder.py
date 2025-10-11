@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 
 from config import INSTAGRAM_REGEX, IDOWNLOADER_BOT, MULTI_MEDIA_BOT, MAX_MEDIA_PER_GROUP
-from state import media_buffer, pending_caption, last_instagram_link, got_response
+from state import media_buffer, pending_caption, last_instagram_link, got_response, captions_buffer
 from utils import build_final_caption
 
 # ✅ Define Pyrogram client using environment variables
@@ -32,27 +32,27 @@ async def handle_instagram_link(client: Client, message: Message):
             link = match.group(0)
             group_id = message.chat.id
 
+            # Reset state
             last_instagram_link[group_id] = link
             media_buffer.clear()
-            got_response[group_id] = False   # ✅ ریست فلگ
+            captions_buffer[group_id] = []   # ✅ reset captions buffer
+            got_response[group_id] = False   # ✅ reset flag
 
-            # اولویت: iDownloadersBot
+            # Priority: iDownloadersBot
             await client.send_message(IDOWNLOADER_BOT, link)
             print(f"📤 Sent link to iDownloadersBot | group_id={group_id}")
             print("⏳ Waiting up to 3s for iDownloadersBot response...")
 
-            # ⏳ fallback بعد از ۳ ثانیه
             async def fallback():
                 await asyncio.sleep(3)
                 if not got_response.get(group_id, False):
                     await client.send_message(MULTI_MEDIA_BOT, link)
-                    print(f"↩️ No response from iDownloadersBot, fallback triggered → sent to Multi_Media_Downloader_bot | group_id={group_id}")
+                    print(f"↩️ No response from iDownloadersBot → fallback to Multi_Media_Downloader_bot | group_id={group_id}")
                 else:
-                    print(f"✅ Response received from iDownloadersBot, no fallback needed | group_id={group_id}")
+                    print(f"✅ Response received from iDownloadersBot | group_id={group_id}")
 
             asyncio.create_task(fallback())
 
-            # پاک کردن پیام اصلی کاربر
             await message.delete()
             print("🗑️ Deleted original message from group")
 
@@ -68,6 +68,7 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
     await client.send_message(group_id, caption)
     print("📝 Sent caption with link")
     media_buffer.clear()
+    captions_buffer[group_id] = []   # ✅ clear captions buffer
 
 # ✅ Fallback timer if caption doesn't arrive
 async def fallback_send(client: Client, group_id: int):
@@ -77,7 +78,8 @@ async def fallback_send(client: Client, group_id: int):
         final_caption = build_final_caption(link)
         await send_album_with_caption(client, group_id, final_caption)
         pending_caption.pop(group_id, None)
-
+        captions_buffer[group_id] = []   # ✅ clear captions buffer
+        
 # ✅ Start the userbot
 print("🧪 Userbot forwarder is running...")
 app.run()
