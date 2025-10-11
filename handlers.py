@@ -139,43 +139,44 @@ def register_handlers(app: Client):
             if not group_id:
                 return
             got_response[group_id] = True
-
-            # Buffer media
+    
+            # ✅ Always buffer media
             if message.photo:
                 media_buffer.append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
-
-            # Collect caption if present
+    
+            # ✅ If caption exists, collect it separately
             if message.caption:
                 collect_caption_and_schedule_flush(client, group_id, message.caption)
-
+    
         except Exception as e:
             print("❌ Error handling Multi_Media PV:", e)
             traceback.print_exc()
-
+    
+    
     @app.on_message(filters.group & filters.user(MULTI_MEDIA_BOT))
     async def handle_multimedia_group(client: Client, message: Message):
         try:
             group_id = message.chat.id
             got_response[group_id] = True
-
-            # Buffer media
+    
+            # ✅ Always buffer media
             if message.photo:
                 media_buffer.append(InputMediaPhoto(message.photo.file_id))
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
-
-            # Collect caption if present
+    
+            # ✅ If caption exists, collect it separately
             if message.caption:
                 collect_caption_and_schedule_flush(client, group_id, message.caption)
-
+    
             # Delete raw bot message
             try:
                 await message.delete()
             except Exception:
                 pass
-
+    
         except Exception as e:
             print("❌ Error handling Multi_Media group:", e)
             traceback.print_exc()
