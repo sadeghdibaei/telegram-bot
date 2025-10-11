@@ -1,11 +1,10 @@
 # 📦 Handles responses from iDownloadersBot & Multi_Media_Downloader_bot
-# handlers.py
 # -----------------------------------------
-# Unified handlers for iDownloadersBot and Multi_Media_Downloader_bot
-# Logic:
+# Unified logic:
 #   - Always buffer incoming media (photo/video).
-#   - Extract caption (whether separate or attached).
-#   - When caption arrives, flush: send album + caption separately.
+#   - Collect all captions (separate or attached).
+#   - Clean signatures and deduplicate captions.
+#   - Flush after short delay: send album + single final caption.
 #   - In private chats: do NOT delete bot messages.
 #   - In groups: delete raw bot messages after processing.
 # -----------------------------------------
@@ -16,7 +15,7 @@ import asyncio
 import traceback
 
 from config import MAX_MEDIA_PER_GROUP, IDOWNLOADER_BOT, MULTI_MEDIA_BOT
-from state import media_buffer, pending_caption, last_instagram_link, got_response
+from state import media_buffer, pending_caption, last_instagram_link, got_response, captions_buffer
 from utils import build_final_caption, clean_caption
 
 
@@ -36,7 +35,42 @@ async def send_album_with_caption(client: Client, group_id: int, caption: str):
 
     # Clear state
     media_buffer.clear()
+    captions_buffer[group_id] = []
     pending_caption.pop(group_id, None)
+
+
+def collect_caption_and_schedule_flush(client: Client, group_id: int, raw_caption: str):
+    """
+    Collect caption (clean + dedup), then schedule delayed flush.
+    """
+    cleaned = clean_caption(raw_caption)
+    if not cleaned:
+        return
+
+    if group_id not in captions_buffer:
+        captions_buffer[group_id] = []
+
+    if cleaned not in captions_buffer[group_id]:
+        captions_buffer[group_id].append(cleaned)
+        print(f"📝 Collected caption: {cleaned[:60]}")
+
+    # Cancel previous pending flush if exists
+    if group_id in pending_caption:
+        try:
+            pending_caption[group_id].cancel()
+        except Exception:
+            pass
+
+    async def delayed_flush():
+        await asyncio.sleep(2)  # wait for all media
+        if media_buffer:
+            link = last_instagram_link.get(group_id, "")
+            # pick the longest caption (usually the most complete)
+            best_caption = max(captions_buffer[group_id], key=len) if captions_buffer[group_id] else ""
+            final_caption = build_final_caption(link, best_caption)
+            await send_album_with_caption(client, group_id, final_caption)
+
+    pending_caption[group_id] = asyncio.create_task(delayed_flush())
 
 
 def register_handlers(app: Client):
@@ -47,19 +81,11 @@ def register_handlers(app: Client):
 
     @app.on_message(filters.private & filters.user(IDOWNLOADER_BOT))
     async def handle_idownloader_pv(client: Client, message: Message):
-        """
-        Handle messages from iDownloadersBot in private chat.
-        - Buffer media
-        - Extract caption if present
-        - Do NOT delete messages in PV
-        """
         try:
             group_id = next(iter(last_instagram_link), None)
             if not group_id:
                 return
-
             got_response[group_id] = True
-            print(f"📩 [PV] Message from iDownloadersBot | group_id={group_id}")
 
             # Buffer media
             if message.photo:
@@ -67,34 +93,19 @@ def register_handlers(app: Client):
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
-            # If caption present, build final caption and flush
+            # Collect caption if present
             if message.caption or message.text:
-                cleaned = clean_caption(message.caption or message.text)
-                link = last_instagram_link.get(group_id, "")
-                final_caption = build_final_caption(link, cleaned)
-
-                async def flush():
-                    await asyncio.sleep(1)
-                    if media_buffer:
-                        await send_album_with_caption(client, group_id, final_caption)
-                asyncio.create_task(flush())
+                collect_caption_and_schedule_flush(client, group_id, message.caption or message.text)
 
         except Exception as e:
-            print("❌ Error handling iDownloadersBot PV response:", e)
+            print("❌ Error handling iDownloadersBot PV:", e)
             traceback.print_exc()
 
     @app.on_message(filters.group & filters.user(IDOWNLOADER_BOT))
     async def handle_idownloader_group(client: Client, message: Message):
-        """
-        Handle messages from iDownloadersBot in groups.
-        - Buffer media
-        - Extract caption if present
-        - Delete raw bot messages after processing
-        """
         try:
             group_id = message.chat.id
             got_response[group_id] = True
-            print(f"📩 [Group] Message from iDownloadersBot | group_id={group_id}")
 
             # Buffer media
             if message.photo:
@@ -102,26 +113,18 @@ def register_handlers(app: Client):
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
-            # If caption present, build final caption and flush
+            # Collect caption if present
             if message.caption or message.text:
-                cleaned = clean_caption(message.caption or message.text)
-                link = last_instagram_link.get(group_id, "")
-                final_caption = build_final_caption(link, cleaned)
+                collect_caption_and_schedule_flush(client, group_id, message.caption or message.text)
 
-                async def flush():
-                    await asyncio.sleep(1)
-                    if media_buffer:
-                        await send_album_with_caption(client, group_id, final_caption)
-                asyncio.create_task(flush())
-
-            # Delete raw bot message in group
+            # Delete raw bot message
             try:
                 await message.delete()
             except Exception:
                 pass
 
         except Exception as e:
-            print("❌ Error handling iDownloadersBot group response:", e)
+            print("❌ Error handling iDownloadersBot group:", e)
             traceback.print_exc()
 
 
@@ -131,19 +134,11 @@ def register_handlers(app: Client):
 
     @app.on_message(filters.private & filters.user(MULTI_MEDIA_BOT))
     async def handle_multimedia_pv(client: Client, message: Message):
-        """
-        Handle messages from Multi_Media_Downloader_bot in private chat.
-        - Buffer media
-        - Extract caption if present (attached to first media)
-        - Do NOT delete messages in PV
-        """
         try:
             group_id = next(iter(last_instagram_link), None)
             if not group_id:
                 return
-
             got_response[group_id] = True
-            print(f"📩 [PV] Message from Multi_Media_Downloader_bot | group_id={group_id}")
 
             # Buffer media
             if message.photo:
@@ -151,34 +146,19 @@ def register_handlers(app: Client):
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
-            # If caption present, build final caption and flush
+            # Collect caption if present
             if message.caption:
-                cleaned = clean_caption(message.caption)
-                link = last_instagram_link.get(group_id, "")
-                final_caption = build_final_caption(link, cleaned)
-
-                async def flush():
-                    await asyncio.sleep(1)
-                    if media_buffer:
-                        await send_album_with_caption(client, group_id, final_caption)
-                asyncio.create_task(flush())
+                collect_caption_and_schedule_flush(client, group_id, message.caption)
 
         except Exception as e:
-            print("❌ Error handling Multi_Media_Downloader_bot PV response:", e)
+            print("❌ Error handling Multi_Media PV:", e)
             traceback.print_exc()
 
     @app.on_message(filters.group & filters.user(MULTI_MEDIA_BOT))
     async def handle_multimedia_group(client: Client, message: Message):
-        """
-        Handle messages from Multi_Media_Downloader_bot in groups.
-        - Buffer media
-        - Extract caption if present (attached to first media)
-        - Delete raw bot messages after processing
-        """
         try:
             group_id = message.chat.id
             got_response[group_id] = True
-            print(f"📩 [Group] Message from Multi_Media_Downloader_bot | group_id={group_id}")
 
             # Buffer media
             if message.photo:
@@ -186,24 +166,16 @@ def register_handlers(app: Client):
             elif message.video:
                 media_buffer.append(InputMediaVideo(message.video.file_id))
 
-            # If caption present, build final caption and flush
+            # Collect caption if present
             if message.caption:
-                cleaned = clean_caption(message.caption)
-                link = last_instagram_link.get(group_id, "")
-                final_caption = build_final_caption(link, cleaned)
+                collect_caption_and_schedule_flush(client, group_id, message.caption)
 
-                async def flush():
-                    await asyncio.sleep(1)
-                    if media_buffer:
-                        await send_album_with_caption(client, group_id, final_caption)
-                asyncio.create_task(flush())
-
-            # Delete raw bot message in group
+            # Delete raw bot message
             try:
                 await message.delete()
             except Exception:
                 pass
 
         except Exception as e:
-            print("❌ Error handling Multi_Media_Downloader_bot group response:", e)
+            print("❌ Error handling Multi_Media group:", e)
             traceback.print_exc()
