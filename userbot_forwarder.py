@@ -3,9 +3,9 @@
 import os
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
+from pyrogram.types import Message
 
-from config import INSTAGRAM_REGEX, IDOWNLOADER_BOT, MAX_MEDIA_PER_GROUP
+from config import INSTAGRAM_REGEX, IDOWNLOADER_BOT, MULTI_MEDIA_BOT, MAX_MEDIA_PER_GROUP
 from state import media_buffer, pending_caption, last_instagram_link
 from utils import build_final_caption
 
@@ -35,9 +35,22 @@ async def handle_instagram_link(client: Client, message: Message):
             last_instagram_link[group_id] = link
             media_buffer.clear()
 
+            # اولویت: iDownloadersBot
             await client.send_message(IDOWNLOADER_BOT, link)
+            print("📤 Sent link to iDownloadersBot")
+
+            # ⏳ اگر بعد از 10 ثانیه جوابی نیومد → fallback به Multi_Media_Downloader_bot
+            async def fallback():
+                await asyncio.sleep(10)
+                if not media_buffer:
+                    await client.send_message(MULTI_MEDIA_BOT, link)
+                    print("↩️ Fallback to Multi_Media_Downloader_bot")
+
+            asyncio.create_task(fallback())
+
+            # پاک کردن پیام اصلی کاربر
             await message.delete()
-            print("📤 Sent link to iDownloadersBot and deleted original message")
+            print("🗑️ Deleted original message")
 
         except Exception as e:
             print("❌ Error sending to bot:", e)
@@ -62,4 +75,5 @@ async def fallback_send(client: Client, group_id: int):
         pending_caption.pop(group_id, None)
 
 # ✅ Start the userbot
+print("🧪 Userbot forwarder is running...")
 app.run()
