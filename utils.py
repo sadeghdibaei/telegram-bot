@@ -5,7 +5,10 @@ def clean_caption(text: str) -> str:
         return ""
     blacklist = [
         "🤖 Downloaded with @iDownloadersBot",
-        "🤖 دریافت شده توسط @iDownloadersBot"
+        "🤖 دریافت شده توسط @iDownloadersBot",
+        "Join the Download videos from «Instagram, Twitter and YouTube» bot",
+        "ID: @Multi_Media_Downloader_bot",
+        "به ربات «دانلود ویدیو از اینستاگرام، توییتر و یوتیوب» ملحق شوید"
     ]
     for phrase in blacklist:
         text = text.replace(phrase, "")
